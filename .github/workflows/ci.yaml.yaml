@@ -1,0 +1,28 @@
+name: check_python
+
+on: # yamllint disable-line
+  workflow_call:
+    inputs:
+      python_version:
+        type: string
+        required: false
+        default: "3.10"
+
+jobs:
+  python_check:
+    runs-on: ubuntu-latest
+    steps:
+    # https://github.com/actions/checkout
+    - uses: actions/checkout@v3
+    # https://github.com/actions/setup-python
+    - uses: actions/setup-python@v3
+      with:
+        python_version: ${{ inputs.python_version }}
+    - name: Install
+      run: pip install yamllint
+    - name: Configure
+      run: |
+        curl https://raw.githubusercontent.com/camber-ops/workflows/main/.yamllint \
+        -o .yamllint
+    - name: Yaml Lint
+      run: yamllint .

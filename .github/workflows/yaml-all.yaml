@@ -18,4 +18,4 @@ on: # yamllint disable-line
 
 jobs:
   yamllint:
-    uses: ./ci/yaml.yaml
+    uses: ./.github/workflows/ci.yaml.yaml

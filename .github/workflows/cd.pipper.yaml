@@ -56,4 +56,4 @@ jobs:
       run: poetry run task pipper_bundle
     - name: Pipper Publish
       # https://github.com/actions/runner/issues/409
-      run: poetry run task pipper_publish ${{ (inputs.devel && '--prefix=devel') || '' }}
+      run: poetry run task pipper_publish ${{ (inputs.devel && '--prefix=devel') || '' }} # yamllint disable-line

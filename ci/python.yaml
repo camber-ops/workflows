@@ -1,0 +1,74 @@
+name: check-python
+
+on: # yamllint disable-line
+  workflow_call:
+    inputs:
+      python_version:
+        required: true
+        type: string
+      check_quality:
+        required: false
+        type: boolean
+        default: true
+      test:
+        required: false
+        type: boolean
+        default: true
+
+# https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services
+permissions:
+  # This is required for AWS OIDC credential access.
+  id-token: write
+  # This is required for actions/checkout.
+  contents: read
+
+jobs:
+  python_check:
+    runs-on: ubuntu-latest
+    steps:
+    # https://github.com/actions/checkout
+    - uses: actions/checkout@v3
+    # https://github.com/actions/setup-python
+    - uses: actions/setup-python@v3
+      with:
+        python_version: ${{ inputs.python_version }}
+    - name: Install Poetry
+      run: pip install poetry
+    # https://github.com/actions/cache
+    - uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cache/poetry
+          ~/.cache/pip
+        key: py-${{ inputs.python_version }}-${{ hashFiles('**/pyproject.toml', '**/poetry.lock', '**/pipper.json') }} # yamllint disable-line
+        restore-keys: |
+          py-${{ matrix.python_version }}-
+    - name: Poetry Install
+      run: |
+        poetry config cache-dir ~/poetry-cache
+        poetry install
+        poetry env info
+    # https://github.com/aws-actions/configure-aws-credentials
+    - uses: aws-actions/configure-aws-credentials@v1
+      with:
+        role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/cbrdata-devel-gh-standard # yamllint disable-line
+        aws-region: us-west-2
+    - name: Pipper Installs
+      run: |
+        poetry run task pipper_update
+        poetry run task pipper_update --dev
+    - name: Flake8
+      if: inputs.check_quality
+      run: poetry run flake8 . --jobs=1 --verbose
+    - name: PyDocStyle
+      if: inputs.check_quality
+      run: poetry run task pydocstyle
+    - name: Radon
+      if: inputs.check_quality
+      run: poetry run task radon
+    - name: MyPy
+      if: inputs.check_quality
+      run: poetry run task mypy
+    - name: Task Test
+      if: inputs.test
+      run: poetry run task test

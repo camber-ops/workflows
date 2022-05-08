@@ -1,0 +1,21 @@
+name: yaml-all
+
+on: # yamllint disable-line
+  push:
+    branches:
+    # Only run when pushing to main.
+    - main
+    paths:
+    - "**.yaml"
+    - "**.yml"
+  pull_request:
+    branches:
+    # Only run when the pull request is targeting main.
+    - main
+    paths:
+    - "**.yaml"
+    - "**.yml"
+
+jobs:
+  yamllint:
+    uses: ./ci/yaml.yaml

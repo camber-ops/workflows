@@ -5,6 +5,10 @@ on: # yamllint disable-line
         required: false
         type: boolean
         default: false
+      prod:
+        required: false
+        type: boolean
+        default: false
       python_version:
         required: false
         type: string
@@ -54,6 +58,9 @@ jobs:
         poetry run task pipper_update --dev
     - name: Pipper Bundle
       run: poetry run task pipper_bundle
-    - name: Pipper Publish
-      # https://github.com/actions/runner/issues/409
-      run: poetry run task pipper_publish ${{ (inputs.devel && '--prefix=devel') || '' }} # yamllint disable-line
+    - name: Pipper Publish Devel
+      if: inputs.devel
+      run: poetry run task pipper_publish_devel
+    - name: Pipper Publish Prod
+      if: inputs.prod
+      run: poetry run task pipper_publish

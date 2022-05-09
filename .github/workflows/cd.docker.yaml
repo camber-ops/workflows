@@ -1,0 +1,47 @@
+on: # yamllint disable-line
+  workflow_call:
+    inputs:
+      python_version:
+        type: string
+        required: false
+        default: "3.10"
+      build_target:
+        type: string
+        required: true
+
+jobs:
+  docker_deploy:
+    runs-on: ubuntu-latest
+    steps:
+    # https://github.com/actions/checkout
+    - uses: actions/checkout@v3
+    # https://github.com/actions/setup-python
+    - uses: actions/setup-python@v3
+      with:
+        python_version: ${{ inputs.python_version }}
+    # https://github.com/hadolint/hadolint/releases
+    - name: Install Hadolint
+      run: |
+        mkdir ~/bin
+        curl \
+        -o ~/bin/hadolint \
+        https://github.com/hadolint/hadolint/releases/download/v2.10.0/hadolint-Linux-x86_64
+        chmod 775 ~/bin/hadolint
+        export PATH=$PATH:~/bin
+    - name: Hadolint
+      run: ~/hadolint .
+    - name: Pip Install
+      run: pip install pipper
+    # https://github.com/aws-actions/configure-aws-credentials
+    - uses: aws-actions/configure-aws-credentials@v1
+      with:
+        role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/cbrdata-devel-gh-ecr # yamllint disable-line
+        aws-region: us-west-2
+    - name: Pipper Installs
+      run: |
+        pipper install --bucket=cbrdata-pipper ci
+    - name: Lint Dockerfiles
+      # run: ci hadolint ${{ inputs.build_target }} --verbose
+      run: ci hadolint --verbose
+    - name: Build Image
+      run: ci build ci ${{ inputs.build_target }} --push

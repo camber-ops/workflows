@@ -13,6 +13,10 @@ on: # yamllint disable-line
         required: false
         type: string
         default: "3.10"
+      shared:
+        required: false
+        type: boolean
+        default: false
 
 # https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services
 permissions:
@@ -61,6 +65,12 @@ jobs:
     - name: Pipper Publish Devel
       if: inputs.devel
       run: poetry run task pipper_publish_devel
+    - name: Pipper Shared Publish Devel
+      if: inputs.devel && inputs.shared
+      run: poetry run task pipper_shared_publish_devel
     - name: Pipper Publish Prod
       if: inputs.prod
       run: poetry run task pipper_publish
+    - name: Pipper Shared Publish Prod
+      if: inputs.prod && inputs.shared
+      run: poetry run task pipper_shared_publish

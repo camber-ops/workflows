@@ -51,7 +51,7 @@ jobs:
     # https://github.com/aws-actions/configure-aws-credentials
     - uses: aws-actions/configure-aws-credentials@v1
       with:
-        role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/cbrdata-devel-gh-standard # yamllint disable-line
+        role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/gh-standard # yamllint disable-line
         aws-region: us-west-2
     - name: Pipper Installs
       run: |

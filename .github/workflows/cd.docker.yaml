@@ -9,6 +9,13 @@ on: # yamllint disable-line
         type: string
         required: true
 
+# https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services
+permissions:
+  # This is required for AWS OIDC credential access.
+  id-token: write
+  # This is required for actions/checkout.
+  contents: read
+
 jobs:
   docker_deploy:
     runs-on: ubuntu-latest
@@ -35,7 +42,7 @@ jobs:
     # https://github.com/aws-actions/configure-aws-credentials
     - uses: aws-actions/configure-aws-credentials@v1
       with:
-        role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/cbrdata-devel-gh-ecr # yamllint disable-line
+        role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/gh-ecr # yamllint disable-line
         aws-region: us-west-2
     - name: Pipper Installs
       run: |

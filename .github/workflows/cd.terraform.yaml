@@ -1,0 +1,115 @@
+# yamllint disable rule:line-length
+
+on: # yamllint disable-line
+  workflow_call:
+    inputs:
+      prod:
+        type: string
+        default: skip
+      devel:
+        type: string
+        default: skip
+
+# https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services
+permissions:
+  # This is required for AWS OIDC credential access.
+  id-token: write
+  # This is required for actions/checkout.
+  contents: read
+
+env:
+  AWS_DEFAULT_REGION: us-west-2
+  TF_IN_AUTOMATION: "1"
+
+jobs:
+  terraform_devel:
+    if: ${{ inputs.devel != 'skip' }}
+    runs-on: ubuntu-latest
+    container:
+      image: 819888084929.dkr.ecr.us-west-2.amazonaws.com/gemini:ci-terraform-prod
+      credentials:
+        username: AWS
+        password: ${{ secrets.ECR_TOKEN }}
+    steps:
+    - uses: actions/checkout@v4
+    - uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/gh-aws-read
+        aws-region: us-west-2
+    - name: Terraform Version
+      run: terraform version
+    - name: Init
+      run: ci tf init
+    - name: Plan
+      run: ci tf devel plan
+        --lock=false
+        --input=false
+        --out=devel.plan
+        --create-missing-workspace
+    # https://docs.gitlab.com/ee/user/infrastructure/iac/mr_integration.html
+    # https://docs.gitlab.com/ee/user/infrastructure/iac/mr_integration.html#multiple-terraform-plan-reports
+    - name: Report Plan
+      run: |
+        cd ./terraform
+        terraform show --json ../devel.plan | jq -r '([.resource_changes[]?.change.actions?]|flatten)|{"create":(map(select(.=="create"))|length),"update":(map(select(.=="update"))|length),"delete":(map(select(.=="delete"))|length)}' > ../devel_plan_report.json
+        cd ..
+    # https://github.com/actions/upload-artifact
+    - name: Archive plan
+      uses: actions/upload-artifact@v4
+      with:
+        name: devel-plan-report
+        path: devel_plan_report.json
+    - if: ${{ inputs.devel == 'apply' }}
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/gh-aws-read-write
+        aws-region: us-west-2
+    - name: Apply
+      if: ${{ inputs.devel == 'apply' }}
+      run: ci tf devel apply ./devel.plan --create-missing-workspace --no-vars
+
+  terraform_prod:
+    if: ${{ inputs.prod != 'skip' }}
+    runs-on: ubuntu-latest
+    container:
+      image: 819888084929.dkr.ecr.us-west-2.amazonaws.com/gemini:ci-terraform-prod
+      credentials:
+        username: AWS
+        password: ${{ secrets.ECR_TOKEN }}
+    steps:
+    - uses: actions/checkout@v4
+    - uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/gh-aws-read
+        aws-region: us-west-2
+    - name: Terraform Version
+      run: terraform version
+    - name: Init
+      run: ci tf init
+    - name: Plan
+      run: ci tf prod plan
+        --lock=false
+        --input=false
+        --out=prod.plan
+        --create-missing-workspace
+    # https://docs.gitlab.com/ee/user/infrastructure/iac/mr_integration.html
+    # https://docs.gitlab.com/ee/user/infrastructure/iac/mr_integration.html#multiple-terraform-plan-reports
+    - name: Report Plan
+      run: |
+        cd ./terraform
+        terraform show --json ../prod.plan | jq -r '([.resource_changes[]?.change.actions?]|flatten)|{"create":(map(select(.=="create"))|length),"update":(map(select(.=="update"))|length),"delete":(map(select(.=="delete"))|length)}' > ../prod_plan_report.json
+        cd ..
+    # https://github.com/actions/upload-artifact
+    - name: Archive plan
+      uses: actions/upload-artifact@v4
+      with:
+        name: prod-plan-report
+        path: prod_plan_report.json
+    - if: ${{ inputs.prod == 'apply' }}
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/gh-aws-read-write
+        aws-region: us-west-2
+    - name: Apply
+      if: ${{ inputs.prod == 'apply' }}
+      run: ci tf prod apply ./prod.plan --create-missing-workspace --no-vars

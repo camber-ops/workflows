@@ -1,0 +1,56 @@
+# yamllint disable rule:line-length
+
+on: # yamllint disable-line
+  workflow_call:
+    inputs:
+      macro:
+        type: string
+        required: true
+      version:
+        type: string
+        required: false
+        default: leading
+
+# https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services
+permissions:
+  # This is required for AWS OIDC credential access.
+  id-token: write
+  # This is required for actions/checkout.
+  contents: read
+
+jobs:
+  reviser_macro:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    container:
+      image: 819888084929.dkr.ecr.us-west-2.amazonaws.com/proxy-hub-prod:reviser-${{ inputs.version }}
+      credentials:
+        username: AWS
+        password: ${{ secrets.ECR_TOKEN }}
+    steps:
+    - name: Install Checkout Dependencies
+      run: yum install tar gzip -y
+    # https://github.com/actions/checkout
+    # v4 is not working right now because AWS linux has an older version of a
+    # shared library that is too old for node v20 to operate within. Leaving it at v3
+    # for now.
+    # https://github.com/actions/checkout/issues/1487
+    - uses: actions/checkout@v3
+    - uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/poetry.lock', '**/requirements.txt', '**/pipper.json') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+    # https://github.com/aws-actions/configure-aws-credentials
+    # v4 is not working right now because AWS linux has an older version of a
+    # shared library that is too old for node v20 to operate within. Leaving it at v3
+    # for now.
+    - uses: aws-actions/configure-aws-credentials@v3
+      with:
+        role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/gh-lambda # yamllint disable-line
+        aws-region: us-west-2
+    - name: Execute Macro
+      run: |
+        export AWS_DEFAULT_REGION=us-west-2
+        reviser-shell --run=${{ inputs.macro }}

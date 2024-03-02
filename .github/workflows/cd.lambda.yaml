@@ -10,6 +10,10 @@ on: # yamllint disable-line
         type: string
         required: false
         default: leading
+      lfs:
+        type: boolean
+        required: false
+        default: false
 
 # https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services
 permissions:
@@ -36,6 +40,8 @@ jobs:
     # for now.
     # https://github.com/actions/checkout/issues/1487
     - uses: actions/checkout@v3
+      with:
+        lfs: ${{ inputs.lfs }}
     - uses: actions/cache@v3
       with:
         path: ~/.cache/pip

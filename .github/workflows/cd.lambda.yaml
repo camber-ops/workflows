@@ -10,10 +10,9 @@ on: # yamllint disable-line
         type: string
         required: false
         default: leading
-      lfs:
-        type: boolean
+      before:
+        type: string
         required: false
-        default: false
 
 # https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services
 permissions:
@@ -40,8 +39,6 @@ jobs:
     # for now.
     # https://github.com/actions/checkout/issues/1487
     - uses: actions/checkout@v3
-      with:
-        lfs: ${{ inputs.lfs }}
     - uses: actions/cache@v3
       with:
         path: ~/.cache/pip
@@ -56,6 +53,9 @@ jobs:
       with:
         role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/gh-lambda # yamllint disable-line
         aws-region: us-west-2
+    - name: Before Macro
+      if: ${{ inputs.before }}
+      run: ${{ inputs.before }}
     - name: Execute Macro
       run: |
         export AWS_DEFAULT_REGION=us-west-2

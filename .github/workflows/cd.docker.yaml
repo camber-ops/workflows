@@ -8,10 +8,6 @@ on: # yamllint disable-line
       build_target:
         type: string
         required: true
-      lfs:
-        type: boolean
-        required: false
-        default: false
 
 # https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services
 permissions:
@@ -26,8 +22,6 @@ jobs:
     steps:
     # https://github.com/actions/checkout
     - uses: actions/checkout@v4
-      with:
-        lfs: ${{ inputs.lfs }}
     # Poetry must be installed before python setup for caching to work.
     # https://github.com/actions/setup-python/issues/369
     - name: Install Poetry
@@ -40,7 +34,7 @@ jobs:
     # https://github.com/hadolint/hadolint/releases
     - name: Install Hadolint
       run: |
-        mkdir ~/.local/bin
+        mkdir -p ~/.local/bin
         curl -L \
         -o ~/.local/bin/hadolint \
         https://github.com/hadolint/hadolint/releases/download/v2.12.0/hadolint-Linux-x86_64

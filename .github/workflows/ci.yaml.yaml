@@ -9,7 +9,7 @@ on: # yamllint disable-line
         default: "3.11"
 
 jobs:
-  python_check:
+  yaml_check:
     runs-on: ubuntu-latest
     steps:
     # https://github.com/actions/checkout

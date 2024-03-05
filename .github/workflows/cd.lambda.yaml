@@ -32,24 +32,17 @@ jobs:
         password: ${{ secrets.ECR_TOKEN }}
     steps:
     - name: Install Checkout Dependencies
-      run: yum install tar gzip -y
+      run: dnf install tar gzip -y
     # https://github.com/actions/checkout
-    # v4 is not working right now because AWS linux has an older version of a
-    # shared library that is too old for node v20 to operate within. Leaving it at v3
-    # for now.
-    # https://github.com/actions/checkout/issues/1487
-    - uses: actions/checkout@v3
-    - uses: actions/cache@v3
+    - uses: actions/checkout@v4
+    - uses: actions/cache@v4
       with:
         path: ~/.cache/pip
         key: ${{ runner.os }}-pip-${{ hashFiles('**/poetry.lock', '**/requirements.txt', '**/pipper.json') }}
         restore-keys: |
           ${{ runner.os }}-pip-
     # https://github.com/aws-actions/configure-aws-credentials
-    # v4 is not working right now because AWS linux has an older version of a
-    # shared library that is too old for node v20 to operate within. Leaving it at v3
-    # for now.
-    - uses: aws-actions/configure-aws-credentials@v3
+    - uses: aws-actions/configure-aws-credentials@v4
       with:
         role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/gh-lambda # yamllint disable-line
         aws-region: us-west-2

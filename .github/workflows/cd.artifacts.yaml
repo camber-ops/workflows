@@ -1,0 +1,46 @@
+name: artifacts
+
+on: # yamllint disable-line
+  workflow_call:
+    inputs:
+      artifact_id:
+        type: string
+        required: true
+      s3_path:
+        type: string
+        required: true
+      devel:
+        type: boolean
+        default: false
+      prod:
+        type: boolean
+        default: false
+
+# https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services
+permissions:
+  # This is required for AWS OIDC credential access.
+  id-token: write
+  # This is required for actions/checkout.
+  contents: read
+
+jobs:
+  save_artifacts:
+    runs-on: ubuntu-latest
+    steps:
+    # https://github.com/actions/download-artifact
+    - uses: actions/download-artifact@v4
+      with:
+        name: ${{ inputs.artifact_id }}
+    - name: AWS CLI
+      run: aws --version
+    # https://github.com/aws-actions/configure-aws-credentials
+    - uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/gh-artifacts # yamllint disable-line
+        aws-region: us-west-2
+    - name: Save Artifact (devel)
+      if: inputs.devel
+      run: aws s3 cp gemini.vsix s3://cbrdata-devel-artifacts/${{ inputs.s3_path }}
+    - name: Save Artifact (prod)
+      if: inputs.prod
+      run: aws s3 cp gemini.vsix s3://cbrdata-prod-artifacts/${{ inputs.s3_path }}

@@ -12,7 +12,7 @@ on: # yamllint disable-line
       python_version:
         required: false
         type: string
-        default: "3.11"
+        default: "3.12"
       shared:
         required: false
         type: boolean

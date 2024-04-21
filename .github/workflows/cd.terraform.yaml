@@ -51,7 +51,7 @@ jobs:
     - name: Report Plan
       run: |
         cd ./terraform
-        terraform show --json ../devel.plan | jq -r '([.resource_changes[]?.change.actions?]|flatten)|{"create":(map(select(.=="create"))|length),"update":(map(select(.=="update"))|length),"delete":(map(select(.=="delete"))|length)}' > ../devel_plan_report.json
+        terraform show --json ./../devel.plan | jq -r '([.resource_changes[]?.change.actions?]|flatten)|{"create":(map(select(.=="create"))|length),"update":(map(select(.=="update"))|length),"delete":(map(select(.=="delete"))|length)}' > ../devel_plan_report.json
         cd ..
     # https://github.com/actions/upload-artifact
     - name: Archive plan
@@ -96,8 +96,10 @@ jobs:
     # https://docs.gitlab.com/ee/user/infrastructure/iac/mr_integration.html#multiple-terraform-plan-reports
     - name: Report Plan
       run: |
+        ls -la
         cd ./terraform
-        terraform show --json ../prod.plan | jq -r '([.resource_changes[]?.change.actions?]|flatten)|{"create":(map(select(.=="create"))|length),"update":(map(select(.=="update"))|length),"delete":(map(select(.=="delete"))|length)}' > ../prod_plan_report.json
+        ls -la
+        terraform show --json ./../prod.plan | jq -r '([.resource_changes[]?.change.actions?]|flatten)|{"create":(map(select(.=="create"))|length),"update":(map(select(.=="update"))|length),"delete":(map(select(.=="delete"))|length)}' > ../prod_plan_report.json
         cd ..
     # https://github.com/actions/upload-artifact
     - name: Archive plan

@@ -32,12 +32,14 @@ jobs:
         password: ${{ secrets.ECR_TOKEN }}
     steps:
     - uses: actions/checkout@v4
+    - name: Terraform Version
+      run: terraform version
+    - name: Terraform Check
+      run: terraform fmt --check --recursive --diff ./terraform
     - uses: aws-actions/configure-aws-credentials@v4
       with:
         role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/gh-aws-read
         aws-region: us-west-2
-    - name: Terraform Version
-      run: terraform version
     - name: Init
       run: ci tf init
     - name: Plan
@@ -78,12 +80,14 @@ jobs:
         password: ${{ secrets.ECR_TOKEN }}
     steps:
     - uses: actions/checkout@v4
+    - name: Terraform Version
+      run: terraform version
+    - name: Terraform Check
+      run: terraform fmt --check --recursive --diff ./terraform
     - uses: aws-actions/configure-aws-credentials@v4
       with:
         role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/gh-aws-read
         aws-region: us-west-2
-    - name: Terraform Version
-      run: terraform version
     - name: Init
       run: ci tf init
     - name: Plan

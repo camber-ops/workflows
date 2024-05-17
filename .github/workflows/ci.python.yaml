@@ -14,6 +14,10 @@ on: # yamllint disable-line
         required: false
         type: boolean
         default: true
+      include_extras:
+        required: false
+        type: boolean
+        default: true
 
 # https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services
 permissions:
@@ -39,7 +43,7 @@ jobs:
         cache: poetry
     - name: Poetry Dependencies
       run: |
-        poetry install
+        poetry install ${{ inputs.include_extras  && '--all-extras' || '' }}
         poetry env info
     # https://github.com/aws-actions/configure-aws-credentials
     - uses: aws-actions/configure-aws-credentials@v4

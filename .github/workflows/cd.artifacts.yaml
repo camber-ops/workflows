@@ -6,6 +6,9 @@ on: # yamllint disable-line
       artifact_id:
         type: string
         required: true
+      path:
+        type: string
+        required: true
       s3_path:
         type: string
         required: true
@@ -40,7 +43,7 @@ jobs:
         aws-region: us-west-2
     - name: Save Artifact (devel)
       if: inputs.devel
-      run: aws s3 cp gemini.vsix s3://cbrdata-devel-artifacts/${{ inputs.s3_path }}
+      run: aws s3 cp ${{ inputs.path }} s3://cbrdata-devel-artifacts/${{ inputs.s3_path }} # yamllint disable-line
     - name: Save Artifact (prod)
       if: inputs.prod
-      run: aws s3 cp gemini.vsix s3://cbrdata-prod-artifacts/${{ inputs.s3_path }}
+      run: aws s3 cp ${{ inputs.path }} s3://cbrdata-prod-artifacts/${{ inputs.s3_path }} # yamllint disable-line

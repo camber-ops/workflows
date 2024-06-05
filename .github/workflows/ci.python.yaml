@@ -18,6 +18,22 @@ on: # yamllint disable-line
         required: false
         type: boolean
         default: true
+      pydocstyle:
+        required: false
+        type: boolean
+        default: true
+      radon:
+        required: false
+        type: boolean
+        default: true
+      mypy:
+        required: false
+        type: boolean
+        default: true
+      flake8:
+        required: false
+        type: boolean
+        default: true
 
 # https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services
 permissions:
@@ -55,20 +71,20 @@ jobs:
         poetry run task pipper_update
         poetry run task pipper_update --dev
     - name: Flake8
-      if: inputs.check_quality
+      if: inputs.check_quality && inputs.flake8
       run: |
         poetry run flake8 --version
         poetry run task flake8
     - name: PyDocStyle
-      if: inputs.check_quality
+      if: inputs.check_quality && inputs.pydocstyle
       run: |
         poetry run pydocstyle --version
         poetry run task pydocstyle
     - name: Radon
-      if: inputs.check_quality
+      if: inputs.check_quality && inputs.radon
       run: poetry run task radon
     - name: MyPy
-      if: inputs.check_quality
+      if: inputs.check_quality && inputs.mypy
       run: |
         poetry run mypy --version
         poetry run task mypy

@@ -1,0 +1,70 @@
+name: check-python-gemini
+
+on: # yamllint disable-line
+  workflow_call:
+    inputs:
+      check_quality:
+        required: false
+        type: boolean
+        default: true
+      test:
+        required: false
+        type: boolean
+        default: true
+      include_extras:
+        required: false
+        type: boolean
+        default: true
+      mypy:
+        required: false
+        type: boolean
+        default: true
+      flake8:
+        required: false
+        type: boolean
+        default: true
+
+# https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services
+permissions:
+  # This is required for AWS OIDC credential access.
+  id-token: write
+  # This is required for actions/checkout.
+  contents: read
+
+jobs:
+  python_check:
+    runs-on: ubuntu-latest
+    container:
+      image: 819888084929.dkr.ecr.us-west-2.amazonaws.com/gemini:gemini-workflows-prod-prerelease
+      credentials:
+        username: AWS
+        password: ${{ secrets.ECR_TOKEN }}
+    steps:
+    # https://github.com/actions/checkout
+    - uses: actions/checkout@v4
+    - name: Poetry Dependencies
+      run: |
+        poetry install ${{ inputs.include_extras  && '--all-extras' || '' }}
+        poetry env info
+    # https://github.com/aws-actions/configure-aws-credentials
+    - uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/gh-standard # yamllint disable-line
+        aws-region: us-west-2
+    - name: Pipper Dependencies
+      run: |
+        poetry run task pipper_update
+        poetry run task pipper_update --dev
+    - name: Flake8
+      if: inputs.check_quality && inputs.flake8
+      run: |
+        poetry run flake8 --version
+        poetry run task flake8
+    - name: MyPy
+      if: inputs.check_quality && inputs.mypy
+      run: |
+        poetry run mypy --version
+        poetry run task mypy
+    - name: Task Test
+      if: inputs.test
+      run: poetry run task test

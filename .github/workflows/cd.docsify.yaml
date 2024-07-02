@@ -1,0 +1,85 @@
+name: docsify
+
+on: # yamllint disable-line
+  workflow_call:
+    inputs:
+      devel:
+        type: boolean
+        default: false
+      prod:
+        type: boolean
+        default: false
+      install_docsify:
+        type: boolean
+        default: true
+      has_code_modules:
+        type: boolean
+        default: false
+
+# https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services
+permissions:
+  # This is required for AWS OIDC credential access.
+  id-token: write
+  # This is required for actions/checkout.
+  contents: read
+
+jobs:
+  collect_docs:
+    runs-on: ubuntu-latest
+    outputs:
+      zipped_docs_name: ${{ steps.docsify.outputs.filename }}
+    steps:
+    # https://github.com/actions/checkout
+    - uses: actions/checkout@v4
+    # Poetry must be installed before python setup for caching to work.
+    # https://github.com/actions/setup-python/issues/369
+    - name: Install Poetry
+      run: pipx install poetry
+    # https://github.com/actions/setup-python
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+    - name: Poetry Dependencies
+      if: inputs.has_code_modules
+      run: |
+        poetry env use python3
+        poetry install
+        poetry env info
+    - name: Install Pipper
+      if: ${{ !inputs.has_code_modules }}
+      run: |
+        poetry env use python3
+        poetry run python -m pip install pipper
+        poetry env info
+    # https://github.com/aws-actions/configure-aws-credentials
+    - uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/gh-pipper # yamllint disable-line
+        aws-region: us-west-2
+    - name: Pipper Dependencies
+      run: poetry run task pipper_update_all
+    - name: Install Docsify
+      if: inputs.install_docsify
+      run: poetry run pipper install docsifier --bucket=cbrdata-pipper --upgrade
+    - name: Docsify
+      id: docsify
+      run: |
+        poetry run docsifier collect .
+        ZIPPED_DOCS_NAME=`ls *.__docs__.zip`
+        echo "filename=${ZIPPED_DOCS_NAME}" >> "${GITHUB_OUTPUT}"
+    # https://github.com/actions/upload-artifact
+    - name: Store Zipped Docs
+      uses: actions/upload-artifact@v4
+      with:
+        name: docsified
+        path: ${{ steps.docsify.outputs.filename }}
+  upload_docs:
+    needs: [collect_docs]
+    uses: ./.github/workflows/cd.artifacts.yaml
+    secrets: inherit
+    with:
+      artifact_id: docsified
+      path: ${{ needs.collect_docs.outputs.zipped_docs_name }}
+      s3_path: __docs__/${{ needs.collect_docs.outputs.zipped_docs_name }}
+      devel: ${{ inputs.devel }}
+      prod: ${{ inputs.prod }}

@@ -57,6 +57,7 @@ jobs:
         role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/gh-pipper # yamllint disable-line
         aws-region: us-west-2
     - name: Pipper Dependencies
+      if: inputs.has_code_modules
       run: poetry run task pipper_update_all
     - name: Install Docsify
       if: inputs.install_docsify

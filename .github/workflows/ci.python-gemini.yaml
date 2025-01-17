@@ -42,8 +42,18 @@ jobs:
     steps:
     # https://github.com/actions/checkout
     - uses: actions/checkout@v4
-    - name: Poetry Dependencies
+    - name: Modify PyProject.toml
+      shell: python
       run: |
+        import pathlib
+        path = pathlib.Path("./pyproject.toml")
+        contents = path.read_text("utf-8").replace("##CI-ONLY## ", "")
+        path.write_text(contents, encoding="utf-8")
+        print(contents)
+    - name: Poetry Dependencies
+      # Cannot use lock files after modifying the pyproject.toml so delete those for CI.
+      run: |
+        rm poetry.lock
         poetry config virtualenvs.create false
         poetry install ${{ inputs.include_extras  && '--all-extras' || '' }}
         poetry env info

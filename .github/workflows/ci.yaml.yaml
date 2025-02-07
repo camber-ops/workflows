@@ -6,7 +6,7 @@ on: # yamllint disable-line
       python_version:
         type: string
         required: false
-        default: "3.12"
+        default: "3.13"
 
 jobs:
   yaml_check:

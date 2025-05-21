@@ -12,10 +12,7 @@ on: # yamllint disable-line
         type: string
         required: false
         default: ci
-        options:
-        - ci
-        - prod
-        - devel
+        description: Will be one of ci, devel, or prod. Defaults to ci.
 
 # https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services
 permissions:

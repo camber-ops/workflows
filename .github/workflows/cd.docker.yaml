@@ -8,6 +8,14 @@ on: # yamllint disable-line
       build_target:
         type: string
         required: true
+      build_mode:
+        type: string
+        required: false
+        default: ci
+        options:
+        - ci
+        - prod
+        - devel
 
 # https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services
 permissions:
@@ -52,4 +60,4 @@ jobs:
     - name: Lint Dockerfiles
       run: ci hadolint ${{ inputs.build_target }} --verbose
     - name: Build Image
-      run: ci build ci ${{ inputs.build_target }} --push
+      run: ci build ${{ inputs.build_mode }} ${{ inputs.build_target }} --push

@@ -43,7 +43,7 @@ jobs:
       if: inputs.has_code_modules
       run: |
         poetry env use python3
-        poetry install
+        poetry install --all-extras
         poetry env info
     - name: Install Pipper
       if: ${{ !inputs.has_code_modules }}

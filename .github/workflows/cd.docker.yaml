@@ -13,6 +13,12 @@ on: # yamllint disable-line
         required: false
         default: ci
         description: Will be one of ci, devel, or prod. Defaults to ci.
+      include_arm_build:
+        type: boolean
+        required: false
+        default: false
+        description: Also build arm64 images if tags have been specified This defaults
+          to false because custom-priced runners are currently required.
 
 # https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services
 permissions:
@@ -22,7 +28,7 @@ permissions:
   contents: read
 
 jobs:
-  docker_deploy:
+  docker_deploy_amd:
     runs-on: ubuntu-latest
     steps:
     # https://github.com/actions/checkout
@@ -57,4 +63,39 @@ jobs:
     - name: Lint Dockerfiles
       run: ci hadolint ${{ inputs.build_target }} --verbose
     - name: Build Image
-      run: ci build ${{ inputs.build_mode }} ${{ inputs.build_target }} --push
+      run: ci build ${{ inputs.build_mode }} ${{ inputs.build_target }} --push --podman
+  docker_deploy_arm:
+    # [2025-11-19] GitHub doesn't currently support arm64 runners for private
+    # repositories. Right now a custom "large" runner has to be used. For cost, this
+    # should be transitioned when standard arm64 become available.
+    # https://docs.github.com/en/actions/reference/runners/github-hosted-runners
+    runs-on: ubuntu-arm-custom
+    if: inputs.include_arm_build
+    steps:
+    # https://github.com/actions/checkout
+    - uses: actions/checkout@v4
+    # Poetry must be installed before python setup for caching to work.
+    # https://github.com/actions/setup-python/issues/369
+    - name: Install Poetry
+      run: curl -sSL https://install.python-poetry.org | python3 -
+    # https://github.com/actions/setup-python
+    - uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python_version }}
+        cache: pip
+    - name: Pip Install
+      run: pip install pipper
+    # https://github.com/aws-actions/configure-aws-credentials
+    - uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/gh-ecr # yamllint disable-line
+        aws-region: us-west-2
+    - name: Pipper Dependencies
+      run: pipper install --bucket=cbrdata-pipper ci
+    - name: Install Podman
+      run: |
+        sudo apt-get update
+        sudo apt-get -y install podman
+        podman --version
+    - name: Build Image
+      run: ci build ${{ inputs.build_mode }} ${{ inputs.build_target }} --push --podman

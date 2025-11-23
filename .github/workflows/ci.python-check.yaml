@@ -1,0 +1,66 @@
+name: check-python
+
+on: # yamllint disable-line
+  workflow_call:
+    inputs:
+      python_version:
+        required: true
+        type: string
+      check_quality:
+        required: false
+        type: boolean
+        default: true
+      test:
+        required: false
+        type: boolean
+        default: true
+      include_extras:
+        required: false
+        type: boolean
+        default: true
+      install_pipper:
+        required: false
+        type: boolean
+        default: true
+
+# https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services
+permissions:
+  # This is required for AWS OIDC credential access.
+  id-token: write
+  # This is required for actions/checkout.
+  contents: read
+
+jobs:
+  python_check:
+    runs-on: ubuntu-latest
+    steps:
+    # https://github.com/actions/checkout
+    - uses: actions/checkout@v6
+    # https://github.com/actions/setup-python
+    - uses: actions/setup-python@v6
+      with:
+        python-version: ${{ inputs.python_version }}
+    # https://github.com/astral-sh/setup-uv
+    - name: Install uv
+      uses: astral-sh/setup-uv@v7
+    - name: Install Dependencies
+      run: |
+        uv sync ${{ inputs.include_extras && '--all-extras' || '' }}
+        uv python list
+    # https://github.com/aws-actions/configure-aws-credentials
+    - uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/gh-standard # yamllint disable-line
+        aws-region: us-west-2
+    - name: Pipper Dependencies
+      if: inputs.install_pipper
+      run: uv run task pipper_update_all
+    - name: Ruff
+      if: inputs.check_quality
+      run: uv run task ruff
+    - name: MyPy
+      if: inputs.check_quality
+      run: uv run task mypy
+    - name: Test
+      if: inputs.test
+      run: uv run task test

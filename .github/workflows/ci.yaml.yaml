@@ -6,7 +6,7 @@ on: # yamllint disable-line
       python_version:
         type: string
         required: false
-        default: "3.13"
+        default: "3.14"
 
 jobs:
   yaml_check:
@@ -22,7 +22,9 @@ jobs:
       run: pip install yamllint
     - name: Configure
       run: |
-        curl https://raw.githubusercontent.com/camber-ops/workflows/main/.yamllint \
-        -o .yamllint
+        if [ ! -f .yamllint.yaml ]; then
+          curl https://raw.githubusercontent.com/camber-ops/workflows/main/.yamllint.yaml \
+          -o .yamllint
+        fi
     - name: Yaml Lint
       run: yamllint .

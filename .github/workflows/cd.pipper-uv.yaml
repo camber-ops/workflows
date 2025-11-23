@@ -12,7 +12,7 @@ on: # yamllint disable-line
       python_version:
         required: false
         type: string
-        default: "3.13"
+        default: "3.14"
       shared:
         required: false
         type: boolean
@@ -34,19 +34,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     # https://github.com/actions/checkout
-    - uses: actions/checkout@v4
-    # Poetry must be installed before python setup for caching to work.
-    # https://github.com/actions/setup-python/issues/369
-    - name: Install Poetry
-      run: pipx install poetry
+    - uses: actions/checkout@v6
     # https://github.com/actions/setup-python
-    - uses: actions/setup-python@v5
+    - uses: actions/setup-python@v6
       with:
         python-version: ${{ inputs.python_version }}
-    - name: Poetry Dependencies
-      run: |
-        poetry install
-        poetry env info
+    # https://github.com/astral-sh/setup-uv
+    - name: Install uv
+      uses: astral-sh/setup-uv@v7
+      with:
+        enable-cache: true
+    - name: Install Dependencies
+      run: uv sync
     # https://github.com/aws-actions/configure-aws-credentials
     - uses: aws-actions/configure-aws-credentials@v4
       with:
@@ -54,20 +53,18 @@ jobs:
         aws-region: us-west-2
     - name: Pipper Dependencies
       if: inputs.install_pipper
-      run: |
-        poetry run task pipper_update
-        poetry run task pipper_update --dev
+      run: uv run task pipper_update_all
     - name: Pipper Bundle
-      run: poetry run task pipper_bundle
+      run: uv run task pipper_bundle
     - name: Pipper Publish Devel
       if: inputs.devel
-      run: poetry run task pipper_publish_devel
+      run: uv run task pipper_publish_devel
     - name: Pipper Shared Publish Devel
       if: inputs.devel && inputs.shared
-      run: poetry run task pipper_shared_publish_devel
+      run: uv run task pipper_shared_publish_devel
     - name: Pipper Publish Prod
       if: inputs.prod
-      run: poetry run task pipper_publish
+      run: uv run task pipper_publish
     - name: Pipper Shared Publish Prod
       if: inputs.prod && inputs.shared
-      run: poetry run task pipper_shared_publish
+      run: uv run task pipper_shared_publish

@@ -34,6 +34,10 @@ on: # yamllint disable-line
         required: false
         type: boolean
         default: true
+      install_pipper:
+        required: false
+        type: boolean
+        default: true
 
 # https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services
 permissions:
@@ -67,6 +71,7 @@ jobs:
         role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/gh-standard # yamllint disable-line
         aws-region: us-west-2
     - name: Pipper Dependencies
+      if: inputs.install_pipper
       run: |
         poetry run task pipper_update
         poetry run task pipper_update --dev

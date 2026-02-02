@@ -1,4 +1,4 @@
-name: check-structure
+name: Check Structure
 
 on: [workflow_call] # yamllint disable-line
 

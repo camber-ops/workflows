@@ -1,4 +1,4 @@
-name: check-python
+name: Check Python
 
 on: # yamllint disable-line
   workflow_call:

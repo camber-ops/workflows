@@ -1,4 +1,6 @@
-name: check_python
+# yamllint disable rule:line-length
+
+name: Check YAML
 
 on: # yamllint disable-line
   workflow_call:

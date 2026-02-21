@@ -1,0 +1,149 @@
+on: # yamllint disable-line
+  workflow_call:
+    inputs:
+      devel:
+        required: false
+        type: boolean
+        default: false
+      prod:
+        required: false
+        type: boolean
+        default: false
+      python_version:
+        required: false
+        type: string
+        default: "3.14"
+      install_pipper:
+        required: false
+        type: boolean
+        default: true
+      include_extras:
+        required: false
+        type: boolean
+        default: true
+
+# https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services
+permissions:
+  # This is required for AWS OIDC credential access.
+  id-token: write
+  # This is required for actions/checkout.
+  contents: read
+
+jobs:
+  ca_publish:
+    runs-on: ubuntu-latest
+    steps:
+    # https://github.com/actions/checkout
+    - uses: actions/checkout@v6
+    # https://github.com/actions/setup-python
+    - uses: actions/setup-python@v6
+      with:
+        python-version: ${{ inputs.python_version }}
+    # https://github.com/astral-sh/setup-uv
+    - name: Install uv
+      uses: astral-sh/setup-uv@v7
+      with:
+        enable-cache: true
+    # https://github.com/aws-actions/configure-aws-credentials
+    - uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/gh-code-artifact # yamllint disable-line
+        aws-region: us-west-2
+    - name: Configure CodeArtifact
+      env:
+        AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+      run: |
+        TOKEN=$(aws codeartifact get-authorization-token \
+          --domain camber \
+          --domain-owner "$AWS_ACCOUNT_ID" \
+          --query authorizationToken \
+          --output text)
+        echo "UV_INDEX_CODE_ARTIFACT_USERNAME=aws" >> "$GITHUB_ENV"
+        echo "UV_INDEX_CODE_ARTIFACT_PASSWORD=$TOKEN" >> "$GITHUB_ENV"
+    - name: Install Dependencies
+      run: |
+        uv sync ${{ inputs.include_extras && '--all-extras' || '' }}
+        uv python list
+    - name: Pipper Dependencies
+      if: inputs.install_pipper
+      run: uv run task pipper_update_all
+    - name: Build
+      run: uv build
+    - name: Delete existing version from CodeArtifact (devel)
+      if: inputs.devel
+      env:
+        AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+      run: |
+        VERSION=$(uv version --short)
+        PACKAGE=$(
+          python3 -c \
+            "import tomllib; d=tomllib.load(open('pyproject.toml','rb')); \
+             print(d['project']['name'].replace('_','-'))"
+        )
+        aws codeartifact delete-package-versions \
+          --domain camber \
+          --domain-owner "$AWS_ACCOUNT_ID" \
+          --repository camber-python-devel \
+          --format pypi \
+          --package "$PACKAGE" \
+          --versions "$VERSION" || true
+    - name: Publish to CodeArtifact (devel)
+      if: inputs.devel
+      env:
+        AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+      run: |
+        TOKEN=$(aws codeartifact get-authorization-token \
+          --domain camber \
+          --domain-owner "$AWS_ACCOUNT_ID" \
+          --query authorizationToken \
+          --output text)
+        ENDPOINT=$(aws codeartifact get-repository-endpoint \
+          --domain camber \
+          --domain-owner "$AWS_ACCOUNT_ID" \
+          --repository camber-python-devel \
+          --format pypi \
+          --query repositoryEndpoint \
+          --output text)
+        uv publish --publish-url "${ENDPOINT}" --username aws --password "$TOKEN"
+    - name: Check for existing version in CodeArtifact (prod)
+      if: inputs.prod
+      env:
+        AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+      run: |
+        VERSION=$(uv version --short)
+        PACKAGE=$(
+          python3 -c \
+            "import tomllib; d=tomllib.load(open('pyproject.toml','rb')); \
+             print(d['project']['name'].replace('_','-'))"
+        )
+        EXISTING=$(aws codeartifact list-package-versions \
+          --domain camber \
+          --domain-owner "$AWS_ACCOUNT_ID" \
+          --repository camber-python \
+          --format pypi \
+          --package "$PACKAGE" \
+          --query "versions[?version=='$VERSION']" \
+          --output text 2>/dev/null || true)
+        if [ -n "$EXISTING" ]; then
+          echo "Version $VERSION of $PACKAGE already exists in camber-python (prod)."
+          echo "Bump the version in pyproject.toml before merging."
+          exit 1
+        fi
+    - name: Publish to CodeArtifact (prod)
+      if: inputs.prod
+      env:
+        AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+      run: |
+        TOKEN=$(aws codeartifact get-authorization-token \
+          --domain camber \
+          --domain-owner "$AWS_ACCOUNT_ID" \
+          --query authorizationToken \
+          --output text)
+        ENDPOINT=$(aws codeartifact get-repository-endpoint \
+          --domain camber \
+          --domain-owner "$AWS_ACCOUNT_ID" \
+          --repository camber-python \
+          --format pypi \
+          --query repositoryEndpoint \
+          --output text)
+        uv publish --publish-url "${ENDPOINT}" --username aws --password "$TOKEN"

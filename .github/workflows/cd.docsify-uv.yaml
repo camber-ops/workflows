@@ -1,30 +1,24 @@
+name: docsify
+
 on: # yamllint disable-line
   workflow_call:
     inputs:
       devel:
-        required: false
         type: boolean
         default: false
       prod:
-        required: false
         type: boolean
         default: false
       python_version:
         required: false
         type: string
         default: "3.14"
-      shared:
-        required: false
-        type: boolean
-        default: false
-      install_pipper:
-        required: false
-        type: boolean
-        default: false
-      include_extras:
-        required: false
+      install_docsify:
         type: boolean
         default: true
+      has_code_modules:
+        type: boolean
+        default: false
 
 # https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services
 permissions:
@@ -34,8 +28,10 @@ permissions:
   contents: read
 
 jobs:
-  pipper_publish:
+  collect_docs:
     runs-on: ubuntu-latest
+    outputs:
+      zipped_docs_name: ${{ steps.docsify.outputs.filename }}
     steps:
     # https://github.com/actions/checkout
     - uses: actions/checkout@v6
@@ -62,26 +58,44 @@ jobs:
           --domain-owner "$AWS_ACCOUNT_ID" \
           --query authorizationToken \
           --output text)
+        ENDPOINT=$(aws codeartifact get-repository-endpoint \
+          --domain camber \
+          --domain-owner "$AWS_ACCOUNT_ID" \
+          --repository camber-python \
+          --format pypi \
+          --query repositoryEndpoint \
+          --output text)
         echo "UV_INDEX_CODE_ARTIFACT_USERNAME=aws" >> "$GITHUB_ENV"
         echo "UV_INDEX_CODE_ARTIFACT_PASSWORD=$TOKEN" >> "$GITHUB_ENV"
+        INDEX_URL="https://aws:${TOKEN}@${ENDPOINT#https://}simple/"
+        echo "CA_INDEX_URL=${INDEX_URL}" >> "$GITHUB_ENV"
     - name: Install Dependencies
+      if: inputs.has_code_modules
       run: |
-        uv sync ${{ inputs.include_extras && '--all-extras' || '' }}
+        uv sync --all-extras
         uv python list
-    - name: Pipper Dependencies
-      if: inputs.install_pipper
-      run: uv run task pipper_update_all
-    - name: Pipper Bundle
-      run: uv run task pipper_bundle
-    - name: Pipper Publish Devel
-      if: inputs.devel
-      run: uv run task pipper_publish_devel
-    - name: Pipper Shared Publish Devel
-      if: inputs.devel && inputs.shared
-      run: uv run task pipper_shared_publish_devel
-    - name: Pipper Publish Prod
-      if: inputs.prod
-      run: uv run task pipper_publish
-    - name: Pipper Shared Publish Prod
-      if: inputs.prod && inputs.shared
-      run: uv run task pipper_shared_publish
+    - name: Install Docsify
+      if: inputs.install_docsify
+      run: uv pip install docsifier --index-url "$CA_INDEX_URL"
+    - name: Docsify
+      id: docsify
+      run: |
+        uv run docsifier collect .
+        ZIPPED_DOCS_NAME=`ls *.__docs__.zip`
+        echo "filename=${ZIPPED_DOCS_NAME}" >> "${GITHUB_OUTPUT}"
+    # https://github.com/actions/upload-artifact
+    - name: Store Zipped Docs
+      uses: actions/upload-artifact@v4
+      with:
+        name: docsified
+        path: ${{ steps.docsify.outputs.filename }}
+  upload_docs:
+    needs: [collect_docs]
+    uses: ./.github/workflows/cd.artifacts.yaml
+    secrets: inherit
+    with:
+      artifact_id: docsified
+      path: ${{ needs.collect_docs.outputs.zipped_docs_name }}
+      s3_path: __docs__/${{ needs.collect_docs.outputs.zipped_docs_name }}
+      devel: ${{ inputs.devel }}
+      prod: ${{ inputs.prod }}

@@ -46,9 +46,20 @@ jobs:
       with:
         role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/gh-lambda # yamllint disable-line
         aws-region: us-west-2
+    - name: Configure CodeArtifact
+      env:
+        AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+      run: |
+        TOKEN=$(aws codeartifact get-authorization-token \
+          --domain camber \
+          --domain-owner "$AWS_ACCOUNT_ID" \
+          --query authorizationToken \
+          --output text)
+        echo "UV_INDEX_CODE_ARTIFACT_USERNAME=aws" >> "$GITHUB_ENV"
+        echo "UV_INDEX_CODE_ARTIFACT_PASSWORD=$TOKEN" >> "$GITHUB_ENV"
     - name: Before Macro
       if: ${{ inputs.before }}
-      run: ${{ inputs.before }}
+      run: reviser-shell --run=${{ inputs.before }}
     - name: Execute Macro
       run: |
         export AWS_DEFAULT_REGION=us-west-2

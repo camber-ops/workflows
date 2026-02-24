@@ -25,13 +25,9 @@ jobs:
   terraform_devel:
     if: ${{ inputs.devel != 'skip' }}
     runs-on: ubuntu-latest
-    container:
-      image: 819888084929.dkr.ecr.us-west-2.amazonaws.com/gemini:ci-terraform-prod
-      credentials:
-        username: AWS
-        password: ${{ secrets.ECR_TOKEN }}
     steps:
     - uses: actions/checkout@v4
+    - uses: hashicorp/setup-terraform@v3
     - name: Terraform Version
       run: terraform version
     - name: Terraform Check
@@ -41,13 +37,19 @@ jobs:
         role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/gh-aws-read
         aws-region: us-west-2
     - name: Init
-      run: ci tf init
+      run: |
+        cd ./terraform
+        terraform init --upgrade
     - name: Plan
-      run: ci tf devel plan
-        --lock=false
-        --input=false
-        --out=devel.plan
-        --create-missing-workspace
+      run: |
+        cd ./terraform
+        terraform workspace select --or-create devel
+        terraform plan \
+          --var-file=terraform.tfvars \
+          --var-file=workspace-devel.tfvars \
+          --lock=false \
+          --input=false \
+          --out=devel.plan
     # https://docs.gitlab.com/ee/user/infrastructure/iac/mr_integration.html
     # https://docs.gitlab.com/ee/user/infrastructure/iac/mr_integration.html#multiple-terraform-plan-reports
     - name: Report Plan
@@ -68,18 +70,16 @@ jobs:
         aws-region: us-west-2
     - name: Apply
       if: ${{ inputs.devel == 'apply' }}
-      run: ci tf devel apply ./devel.plan --create-missing-workspace --no-vars
+      run: |
+        cd ./terraform
+        terraform apply ./devel.plan
 
   terraform_prod:
     if: ${{ inputs.prod != 'skip' }}
     runs-on: ubuntu-latest
-    container:
-      image: 819888084929.dkr.ecr.us-west-2.amazonaws.com/gemini:ci-terraform-prod
-      credentials:
-        username: AWS
-        password: ${{ secrets.ECR_TOKEN }}
     steps:
     - uses: actions/checkout@v4
+    - uses: hashicorp/setup-terraform@v3
     - name: Terraform Version
       run: terraform version
     - name: Terraform Check
@@ -89,13 +89,19 @@ jobs:
         role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/gh-aws-read
         aws-region: us-west-2
     - name: Init
-      run: ci tf init
+      run: |
+        cd ./terraform
+        terraform init --upgrade
     - name: Plan
-      run: ci tf prod plan
-        --lock=false
-        --input=false
-        --out=prod.plan
-        --create-missing-workspace
+      run: |
+        cd ./terraform
+        terraform workspace select --or-create prod
+        terraform plan \
+          --var-file=terraform.tfvars \
+          --var-file=workspace-prod.tfvars \
+          --lock=false \
+          --input=false \
+          --out=prod.plan
     # https://docs.gitlab.com/ee/user/infrastructure/iac/mr_integration.html
     # https://docs.gitlab.com/ee/user/infrastructure/iac/mr_integration.html#multiple-terraform-plan-reports
     - name: Report Plan
@@ -116,4 +122,6 @@ jobs:
         aws-region: us-west-2
     - name: Apply
       if: ${{ inputs.prod == 'apply' }}
-      run: ci tf prod apply ./prod.plan --create-missing-workspace --no-vars
+      run: |
+        cd ./terraform
+        terraform apply ./prod.plan

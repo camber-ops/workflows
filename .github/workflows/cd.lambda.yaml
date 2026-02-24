@@ -24,7 +24,6 @@ permissions:
 jobs:
   reviser_macro:
     runs-on: ubuntu-latest
-    environment: ${{ inputs.environment }}
     container:
       image: 819888084929.dkr.ecr.us-west-2.amazonaws.com/proxy-hub-prod:reviser-${{ inputs.version }}
       credentials:
@@ -32,7 +31,7 @@ jobs:
         password: ${{ secrets.ECR_TOKEN }}
     steps:
     - name: Install Checkout Dependencies
-      run: dnf install tar gzip -y
+      run: dnf install tar gzip unzip -y
     # https://github.com/actions/checkout
     - uses: actions/checkout@v4
     - uses: actions/cache@v4
@@ -46,15 +45,17 @@ jobs:
       with:
         role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/gh-lambda # yamllint disable-line
         aws-region: us-west-2
+    - name: Install AWS CLI
+      run: |
+        curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o awscliv2.zip
+        unzip -q awscliv2.zip
+        ./aws/install
+        rm -rf awscliv2.zip aws/
     - name: Configure CodeArtifact
       env:
         AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
       run: |
-        TOKEN=$(aws codeartifact get-authorization-token \
-          --domain camber \
-          --domain-owner "$AWS_ACCOUNT_ID" \
-          --query authorizationToken \
-          --output text)
+        TOKEN=$(aws codeartifact get-authorization-token --domain camber --domain-owner "$AWS_ACCOUNT_ID" --query authorizationToken --output text)
         echo "UV_INDEX_CODE_ARTIFACT_USERNAME=aws" >> "$GITHUB_ENV"
         echo "UV_INDEX_CODE_ARTIFACT_PASSWORD=$TOKEN" >> "$GITHUB_ENV"
     - name: Before Macro

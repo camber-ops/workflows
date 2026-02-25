@@ -16,6 +16,6 @@ jobs:
     - name: Setup Node.js
       uses: actions/setup-node@v6
       with:
-        node-version: '26'
+        node-version: '24'
     - name: Markdown Linting
       run: npx prettier --prose-wrap=always --check "**/*.md"

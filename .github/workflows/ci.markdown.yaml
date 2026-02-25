@@ -1,0 +1,20 @@
+name: Markdown Linting
+
+on: [workflow_call] # yamllint disable-line
+
+permissions:
+  # This is required for the commit count check.
+  pull-requests: read
+  repository-projects: read
+
+jobs:
+  markdown:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Setup Node.js
+      uses: actions/setup-node@v6
+      with:
+        node-version: '26'
+    - name: Markdown Linting
+      run: npx prettier --prose-wrap=always --check "**/*.md"

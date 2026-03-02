@@ -1,7 +1,6 @@
-# yamllint disable rule:line-length
 name: check-python
 
-on: # yamllint disable-line
+on:
   workflow_call:
     inputs:
       python_version:
@@ -41,82 +40,95 @@ jobs:
   python_check:
     runs-on: ubuntu-latest
     steps:
-    # https://github.com/actions/checkout
-    - uses: actions/checkout@v6
-    # https://github.com/actions/setup-python
-    - uses: actions/setup-python@v6
-      with:
-        python-version: ${{ inputs.python_version }}
-    # https://github.com/astral-sh/setup-uv
-    - name: Install uv
-      uses: astral-sh/setup-uv@v7
-    # https://github.com/aws-actions/configure-aws-credentials
-    - uses: aws-actions/configure-aws-credentials@v4
-      with:
-        role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/gh-standard
-        aws-region: us-west-2
-    - name: Configure CodeArtifact
-      env:
-        AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
-      run: |
-        TOKEN=$(aws codeartifact get-authorization-token \
-          --domain camber \
-          --domain-owner "$AWS_ACCOUNT_ID" \
-          --query authorizationToken \
-          --output text)
-        echo "UV_INDEX_CODE_ARTIFACT_USERNAME=aws" >> "$GITHUB_ENV"
-        echo "UV_INDEX_CODE_ARTIFACT_PASSWORD=$TOKEN" >> "$GITHUB_ENV"
-    - name: Install Dependencies
-      run: |
-        uv sync ${{ inputs.include_extras && '--all-extras' || '' }}
-        uv python list
-    - name: Pipper Dependencies
-      if: inputs.install_pipper
-      run: uv run task pipper_update_all
-    - name: Ruff
-      if: inputs.check_quality
-      run: uv run task ruff
-    - name: MyPy
-      if: inputs.check_quality
-      run: uv run task mypy
-    - name: Test
-      if: inputs.test
-      run: uv run task test
-    - name: Coverage Summary
-      if: inputs.test && github.event_name == 'pull_request'
-      id: coverage
-      run: |
-        SUMMARY=$(uv run coverage report --format=markdown 2>/dev/null || uv run coverage report 2>/dev/null || echo "Coverage report not available.")
-        echo "summary<<EOF" >> "$GITHUB_OUTPUT"
-        echo "$SUMMARY" >> "$GITHUB_OUTPUT"
-        echo "EOF" >> "$GITHUB_OUTPUT"
-    # https://github.com/actions/github-script
-    - name: Coverage Comment
-      if: inputs.test && inputs.report_coverage && github.event_name == 'pull_request'
-      uses: actions/github-script@v7
-      with:
-        github-token: ${{ github.token }}
-        script: |
-          const marker = '<!-- coverage-comment -->';
-          const body = `${marker}\n### Coverage Report\n${{ steps.coverage.outputs.summary }}`;
-          const { data: comments } = await github.rest.issues.listComments({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            issue_number: context.issue.number,
-          });
-          const existing = comments.find(c => c.body.includes(marker));
-          if (existing) {
-            await github.rest.issues.updateComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              comment_id: existing.id,
-              body,
-            });
-          } else {
-            await github.rest.issues.createComment({
+      # https://github.com/actions/checkout
+      - uses: actions/checkout@v6
+      # Access to the toolbelt repo scripts
+      - name: Checkout Toolbelt
+        uses: actions/checkout@v6
+        with:
+          repository: camber-ops/toolbelt
+          ref: main
+          token: ${{ secrets.REPO_READ_PAT }}
+          path: .toolbelt
+      - name: Load Toolbelt
+        uses: ./.toolbelt
+      # https://github.com/actions/setup-python
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ inputs.python_version }}
+      # https://github.com/astral-sh/setup-uv
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+      # https://github.com/aws-actions/configure-aws-credentials
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume:
+            arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/gh-standard
+          aws-region: us-west-2
+      - name: Configure CodeArtifact
+        env:
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+        run: |
+          TOKEN=$(aws codeartifact get-authorization-token \
+            --domain camber \
+            --domain-owner "$AWS_ACCOUNT_ID" \
+            --query authorizationToken \
+            --output text)
+          echo "UV_INDEX_CODE_ARTIFACT_USERNAME=aws" >> "$GITHUB_ENV"
+          echo "UV_INDEX_CODE_ARTIFACT_PASSWORD=$TOKEN" >> "$GITHUB_ENV"
+      - name: Install Dependencies
+        run: |
+          uv sync ${{ inputs.include_extras && '--all-extras' || '' }}
+          uv python list
+      - name: Pipper Dependencies
+        if: inputs.install_pipper
+        run: uv run task pipper_update_all
+      - name: Ruff
+        if: inputs.check_quality
+        run: uv run task ruff
+      - name: MyPy
+        if: inputs.check_quality
+        run: uv run task mypy
+      - name: Test
+        if: inputs.test
+        run: uv run task test
+      - name: Coverage Summary
+        if: inputs.test && github.event_name == 'pull_request'
+        id: coverage
+        run: |
+          SUMMARY=$(uv run coverage report --format=markdown 2>/dev/null || uv run coverage report 2>/dev/null || echo "Coverage report not available.")
+          echo "summary<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$SUMMARY" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+      # https://github.com/actions/github-script
+      - name: Coverage Comment
+        if:
+          inputs.test && inputs.report_coverage && github.event_name ==
+          'pull_request'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const marker = '<!-- coverage-comment -->';
+            const body = `${marker}\n### Coverage Report\n${{ steps.coverage.outputs.summary }}`;
+            const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body,
             });
-          }
+            const existing = comments.find(c => c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }

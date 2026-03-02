@@ -1,4 +1,6 @@
-on: # yamllint disable-line
+name: Podman
+
+on:
   workflow_call:
     inputs:
       python_version:
@@ -18,13 +20,15 @@ on: # yamllint disable-line
         type: boolean
         required: false
         default: false
-        description: Also build arm64 images if tags have been specified This defaults
-          to false because custom-priced runners are currently required.
+        description:
+          Also build arm64 images if tags have been specified This defaults to
+          false because custom-priced runners are currently required.
       include_amd_build:
         type: boolean
         required: false
         default: true
-        description: Include amd64 in the build process. This is enabled by default.
+        description:
+          Include amd64 in the build process. This is enabled by default.
 
 # https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services
 permissions:
@@ -38,73 +42,83 @@ jobs:
     runs-on: ubuntu-latest
     if: inputs.include_amd_build
     steps:
-    # https://github.com/actions/checkout
-    - uses: actions/checkout@v4
-    # Poetry must be installed before python setup for caching to work.
-    # https://github.com/actions/setup-python/issues/369
-    - name: Install Poetry
-      run: pipx install poetry
-    # https://github.com/actions/setup-python
-    - uses: actions/setup-python@v5
-      with:
-        python-version: ${{ inputs.python_version }}
-        cache: pip
-    # https://github.com/hadolint/hadolint/releases
-    - name: Install Hadolint
-      run: |
-        mkdir -p ~/.local/bin
-        curl -L \
-        -o ~/.local/bin/hadolint \
-        https://github.com/hadolint/hadolint/releases/download/v2.14.0/hadolint-linux-x86_64
-        chmod 755 ~/.local/bin/hadolint
-        hadolint --version
-    - name: Pip Install
-      run: pip install pipper
-    # https://github.com/aws-actions/configure-aws-credentials
-    - uses: aws-actions/configure-aws-credentials@v4
-      with:
-        role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/gh-ecr # yamllint disable-line
-        aws-region: us-west-2
-    - name: Pipper Dependencies
-      run: pipper install --bucket=cbrdata-pipper ci
-    # Alias podman to docker since podman is a drop-in replacement
-    - name: Alias Podman to Docker
-      run: |
-        sudo ln -s $(which podman) /usr/local/bin/docker
-        docker --version
-    - name: Lint Dockerfiles
-      run: |
-        for target in ${{ inputs.build_target }}; do
-          echo ""
-          echo "=== LINTING: ${target} ========================"
-          ci hadolint $target --verbose
-          done
-    # Login to Amazon ECR Private
-    # This uses the default region configured above.
-    # https://github.com/aws-actions/amazon-ecr-login
-    - name: Login to Amazon ECR Private
-      id: login-ecr-private
-      uses: aws-actions/amazon-ecr-login@v2
-      # No 'with' block needed; defaults to private
+      # https://github.com/actions/checkout
+      - uses: actions/checkout@v6
+      # Access to the toolbelt repo scripts
+      - name: Checkout Toolbelt
+        uses: actions/checkout@v6
+        with:
+          repository: camber-ops/toolbelt
+          ref: main
+          token: ${{ secrets.REPO_READ_PAT }}
+          path: .toolbelt
+      - name: Load Toolbelt
+        uses: ./.toolbelt
+      # Poetry must be installed before python setup for caching to work.
+      # https://github.com/actions/setup-python/issues/369
+      - name: Install Poetry
+        run: pipx install poetry
+      # https://github.com/actions/setup-python
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python_version }}
+          cache: pip
+      # https://github.com/hadolint/hadolint/releases
+      - name: Install Hadolint
+        run: |
+          mkdir -p ~/.local/bin
+          curl -L \
+          -o ~/.local/bin/hadolint \
+          https://github.com/hadolint/hadolint/releases/download/v2.14.0/hadolint-linux-x86_64
+          chmod 755 ~/.local/bin/hadolint
+          hadolint --version
+      - name: Pip Install
+        run: pip install pipper
+      # https://github.com/aws-actions/configure-aws-credentials
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/gh-ecr
+          aws-region: us-west-2
+      - name: Pipper Dependencies
+        run: pipper install --bucket=cbrdata-pipper ci
+      # Alias podman to docker since podman is a drop-in replacement
+      - name: Alias Podman to Docker
+        run: |
+          sudo ln -s $(which podman) /usr/local/bin/docker
+          docker --version
+      - name: Lint Dockerfiles
+        run: |
+          for target in ${{ inputs.build_target }}; do
+            echo ""
+            echo "=== LINTING: ${target} ========================"
+            ci hadolint $target --verbose
+            done
+      # Login to Amazon ECR Private
+      # This uses the default region configured above.
+      # https://github.com/aws-actions/amazon-ecr-login
+      - name: Login to Amazon ECR Private
+        id: login-ecr-private
+        uses: aws-actions/amazon-ecr-login@v2
+        # No 'with' block needed; defaults to private
 
-    # Login to Amazon ECR Public
-    # The action requires the us-east-1 region for public auth.
-    # https://github.com/aws-actions/amazon-ecr-login
-    - name: Login to Amazon ECR Public
-      id: login-ecr-public
-      uses: aws-actions/amazon-ecr-login@v2
-      env:
-        AWS_REGION: us-east-1
-        AWS_DEFAULT_REGION: us-east-1
-      with:
-        registry-type: public
-    - name: Build Image
-      run: |
-        for target in ${{ inputs.build_target }}; do
-          echo ""
-          echo "=== BUILDING: ${target} ========================"
-          ci build ${{ inputs.build_mode }} $target --push --podman
-        done
+      # Login to Amazon ECR Public
+      # The action requires the us-east-1 region for public auth.
+      # https://github.com/aws-actions/amazon-ecr-login
+      - name: Login to Amazon ECR Public
+        id: login-ecr-public
+        uses: aws-actions/amazon-ecr-login@v2
+        env:
+          AWS_REGION: us-east-1
+          AWS_DEFAULT_REGION: us-east-1
+        with:
+          registry-type: public
+      - name: Build Image
+        run: |
+          for target in ${{ inputs.build_target }}; do
+            echo ""
+            echo "=== BUILDING: ${target} ========================"
+            ci build ${{ inputs.build_mode }} $target --push --podman
+          done
   docker_deploy_arm:
     # [2025-11-19] GitHub doesn't currently support arm64 runners for private
     # repositories. Right now a custom "large" runner has to be used. For cost, this
@@ -113,80 +127,80 @@ jobs:
     runs-on: ubuntu-arm-custom
     if: inputs.include_arm_build
     steps:
-    # https://github.com/actions/checkout
-    - uses: actions/checkout@v4
-    # Poetry must be installed before python setup for caching to work.
-    # https://github.com/actions/setup-python/issues/369
-    - name: Install Poetry
-      run: curl -sSL https://install.python-poetry.org | python3 -
-    # https://github.com/actions/setup-python
-    - uses: actions/setup-python@v5
-      with:
-        python-version: ${{ inputs.python_version }}
-        cache: pip
-    # The custom runner doesn't export the ~/.local/bin path by default, so append it
-    # to the path here.
-    - name: Configure Local Bin
-      run: |
-        mkdir -p ~/.local/bin
-        echo "${HOME}/.local/bin" >> $GITHUB_PATH
-    # https://github.com/hadolint/hadolint/releases
-    - name: Install Hadolint
-      run: |
-        curl -L \
-        -o ~/.local/bin/hadolint \
-        https://github.com/hadolint/hadolint/releases/download/v2.14.0/hadolint-linux-arm64
-        chmod 755 ~/.local/bin/hadolint
-        ~/.local/bin/hadolint --version
-    - name: Pip Install
-      run: pip install pipper
-    # https://github.com/aws-actions/configure-aws-credentials
-    - uses: aws-actions/configure-aws-credentials@v4
-      with:
-        role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/gh-ecr # yamllint disable-line
-        aws-region: us-west-2
-    - name: Pipper Dependencies
-      run: pipper install --bucket=cbrdata-pipper ci
-    - name: Install Podman
-      run: |
-        sudo apt-get update
-        sudo apt-get -y install podman
-        podman --version
-    # Alias podman to docker since podman is a drop-in replacement
-    - name: Alias Podman to Docker
-      run: |
-        sudo ln -s $(which podman) /usr/local/bin/docker
-        docker --version
-    - name: Lint Dockerfiles
-      run: |
-        for target in ${{ inputs.build_target }}; do
-          echo ""
-          echo "=== LINTING: ${target} ========================"
-          ci hadolint $target --verbose
-          done
-    # Login to Amazon ECR Private
-    # This uses the default region configured above.
-    # https://github.com/aws-actions/amazon-ecr-login
-    - name: Login to Amazon ECR Private
-      id: login-ecr-private
-      uses: aws-actions/amazon-ecr-login@v2
-      # No 'with' block needed; defaults to private
+      # https://github.com/actions/checkout
+      - uses: actions/checkout@v6
+      # Poetry must be installed before python setup for caching to work.
+      # https://github.com/actions/setup-python/issues/369
+      - name: Install Poetry
+        run: curl -sSL https://install.python-poetry.org | python3 -
+      # https://github.com/actions/setup-python
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python_version }}
+          cache: pip
+      # The custom runner doesn't export the ~/.local/bin path by default, so append it
+      # to the path here.
+      - name: Configure Local Bin
+        run: |
+          mkdir -p ~/.local/bin
+          echo "${HOME}/.local/bin" >> $GITHUB_PATH
+      # https://github.com/hadolint/hadolint/releases
+      - name: Install Hadolint
+        run: |
+          curl -L \
+          -o ~/.local/bin/hadolint \
+          https://github.com/hadolint/hadolint/releases/download/v2.14.0/hadolint-linux-arm64
+          chmod 755 ~/.local/bin/hadolint
+          ~/.local/bin/hadolint --version
+      - name: Pip Install
+        run: pip install pipper
+      # https://github.com/aws-actions/configure-aws-credentials
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/gh-ecr
+          aws-region: us-west-2
+      - name: Pipper Dependencies
+        run: pipper install --bucket=cbrdata-pipper ci
+      - name: Install Podman
+        run: |
+          sudo apt-get update
+          sudo apt-get -y install podman
+          podman --version
+      # Alias podman to docker since podman is a drop-in replacement
+      - name: Alias Podman to Docker
+        run: |
+          sudo ln -s $(which podman) /usr/local/bin/docker
+          docker --version
+      - name: Lint Dockerfiles
+        run: |
+          for target in ${{ inputs.build_target }}; do
+            echo ""
+            echo "=== LINTING: ${target} ========================"
+            ci hadolint $target --verbose
+            done
+      # Login to Amazon ECR Private
+      # This uses the default region configured above.
+      # https://github.com/aws-actions/amazon-ecr-login
+      - name: Login to Amazon ECR Private
+        id: login-ecr-private
+        uses: aws-actions/amazon-ecr-login@v2
+        # No 'with' block needed; defaults to private
 
-    # Login to Amazon ECR Public
-    # The action requires the us-east-1 region for public auth.
-    # https://github.com/aws-actions/amazon-ecr-login
-    - name: Login to Amazon ECR Public
-      id: login-ecr-public
-      uses: aws-actions/amazon-ecr-login@v2
-      env:
-        AWS_REGION: us-east-1
-        AWS_DEFAULT_REGION: us-east-1
-      with:
-        registry-type: public
-    - name: Build Image
-      run: |
-        for target in ${{ inputs.build_target }}; do
-          echo ""
-          echo "=== BUILDING: ${target} ========================"
-          ci build ${{ inputs.build_mode }} $target --push --podman
-        done
+      # Login to Amazon ECR Public
+      # The action requires the us-east-1 region for public auth.
+      # https://github.com/aws-actions/amazon-ecr-login
+      - name: Login to Amazon ECR Public
+        id: login-ecr-public
+        uses: aws-actions/amazon-ecr-login@v2
+        env:
+          AWS_REGION: us-east-1
+          AWS_DEFAULT_REGION: us-east-1
+        with:
+          registry-type: public
+      - name: Build Image
+        run: |
+          for target in ${{ inputs.build_target }}; do
+            echo ""
+            echo "=== BUILDING: ${target} ========================"
+            ci build ${{ inputs.build_mode }} $target --push --podman
+          done

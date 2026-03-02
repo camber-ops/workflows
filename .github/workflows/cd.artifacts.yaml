@@ -1,6 +1,6 @@
 name: artifacts
 
-on: # yamllint disable-line
+on:
   workflow_call:
     inputs:
       artifact_id:
@@ -30,20 +30,35 @@ jobs:
   save_artifacts:
     runs-on: ubuntu-latest
     steps:
-    # https://github.com/actions/download-artifact
-    - uses: actions/download-artifact@v4
-      with:
-        name: ${{ inputs.artifact_id }}
-    - name: AWS CLI
-      run: aws --version
-    # https://github.com/aws-actions/configure-aws-credentials
-    - uses: aws-actions/configure-aws-credentials@v4
-      with:
-        role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/gh-artifacts # yamllint disable-line
-        aws-region: us-west-2
-    - name: Save Artifact (devel)
-      if: inputs.devel
-      run: aws s3 cp ${{ inputs.path }} s3://cbrdata-devel-artifacts/${{ inputs.s3_path }} # yamllint disable-line
-    - name: Save Artifact (prod)
-      if: inputs.prod
-      run: aws s3 cp ${{ inputs.path }} s3://cbrdata-prod-artifacts/${{ inputs.s3_path }} # yamllint disable-line
+      # https://github.com/actions/download-artifact
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.artifact_id }}
+      # Access to the toolbelt repo scripts
+      - name: Checkout Toolbelt
+        uses: actions/checkout@v6
+        with:
+          repository: camber-ops/toolbelt
+          ref: main
+          token: ${{ secrets.REPO_READ_PAT }}
+          path: .toolbelt
+      - name: Load Toolbelt
+        uses: ./.toolbelt
+      - name: AWS CLI
+        run: aws --version
+      # https://github.com/aws-actions/configure-aws-credentials
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume:
+            arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/gh-artifacts
+          aws-region: us-west-2
+      - name: Save Artifact (devel)
+        if: inputs.devel
+        run:
+          aws s3 cp ${{ inputs.path }} s3://cbrdata-devel-artifacts/${{
+          inputs.s3_path }}
+      - name: Save Artifact (prod)
+        if: inputs.prod
+        run:
+          aws s3 cp ${{ inputs.path }} s3://cbrdata-prod-artifacts/${{
+          inputs.s3_path }}

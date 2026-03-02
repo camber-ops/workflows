@@ -1,8 +1,6 @@
-# yamllint disable rule:line-length
-
 name: Check YAML
 
-on: # yamllint disable-line
+on:
   workflow_call:
     inputs:
       python_version:
@@ -14,19 +12,29 @@ jobs:
   yaml_check:
     runs-on: ubuntu-latest
     steps:
-    # https://github.com/actions/checkout
-    - uses: actions/checkout@v4
-    # https://github.com/actions/setup-python
-    - uses: actions/setup-python@v5
-      with:
-        python-version: ${{ inputs.python_version }}
-    - name: Install
-      run: pip install yamllint
-    - name: Configure
-      run: |
-        if [ ! -f .yamllint.yaml ]; then
-          curl https://raw.githubusercontent.com/camber-ops/workflows/main/.yamllint.yaml \
-          -o .yamllint
-        fi
-    - name: Yaml Lint
-      run: yamllint .
+      # https://github.com/actions/checkout
+      - uses: actions/checkout@v6
+      # Access to the toolbelt repo scripts
+      - name: Checkout Toolbelt
+        uses: actions/checkout@v6
+        with:
+          repository: camber-ops/toolbelt
+          ref: main
+          token: ${{ secrets.REPO_READ_PAT }}
+          path: .toolbelt
+      - name: Load Toolbelt
+        uses: ./.toolbelt
+      # https://github.com/actions/setup-python
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python_version }}
+      - name: Install
+        run: pip install yamllint
+      - name: Configure
+        run: |
+          if [ ! -f .yamllint.yaml ]; then
+            curl https://raw.githubusercontent.com/camber-ops/workflows/main/.yamllint.yaml \
+            -o .yamllint
+          fi
+      - name: Yaml Lint
+        run: yamllint .

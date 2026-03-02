@@ -1,0 +1,32 @@
+name: Prettier Linting
+
+on: [workflow_call]
+
+permissions:
+  # This is required for the commit count check.
+  contents: read
+  pull-requests: read
+  repository-projects: read
+
+jobs:
+  markdown:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      # Access to the toolbelt repo scripts
+      - name: Checkout Toolbelt
+        uses: actions/checkout@v6
+        with:
+          repository: camber-ops/toolbelt
+          ref: main
+          token: ${{ secrets.REPO_READ_PAT }}
+          path: .toolbelt
+      - name: Load Toolbelt
+        uses: ./.toolbelt
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: ""
+      - name: Linting
+        run: npx prettier --check .

@@ -1,6 +1,6 @@
 name: Check Python
 
-on: # yamllint disable-line
+on:
   workflow_call:
     inputs:
       python_version:
@@ -50,49 +50,60 @@ jobs:
   python_check:
     runs-on: ubuntu-latest
     steps:
-    # https://github.com/actions/checkout
-    - uses: actions/checkout@v4
-    # Poetry must be installed before python setup for caching to work.
-    # https://github.com/actions/setup-python/issues/369
-    - name: Install Poetry
-      run: pipx install poetry
-    # https://github.com/actions/setup-python
-    - uses: actions/setup-python@v5
-      with:
-        python-version: ${{ inputs.python_version }}
-        cache: poetry
-    - name: Poetry Dependencies
-      run: |
-        poetry install ${{ inputs.include_extras  && '--all-extras' || '' }}
-        poetry env info
-    # https://github.com/aws-actions/configure-aws-credentials
-    - uses: aws-actions/configure-aws-credentials@v4
-      with:
-        role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/gh-standard # yamllint disable-line
-        aws-region: us-west-2
-    - name: Pipper Dependencies
-      if: inputs.install_pipper
-      run: |
-        poetry run task pipper_update
-        poetry run task pipper_update --dev
-    - name: Flake8
-      if: inputs.check_quality && inputs.flake8
-      run: |
-        poetry run flake8 --version
-        poetry run task flake8
-    - name: PyDocStyle
-      if: inputs.check_quality && inputs.pydocstyle
-      run: |
-        poetry run pydocstyle --version
-        poetry run task pydocstyle
-    - name: Radon
-      if: inputs.check_quality && inputs.radon
-      run: poetry run task radon
-    - name: MyPy
-      if: inputs.check_quality && inputs.mypy
-      run: |
-        poetry run mypy --version
-        poetry run task mypy
-    - name: Task Test
-      if: inputs.test
-      run: poetry run task test
+      # https://github.com/actions/checkout
+      - uses: actions/checkout@v6
+      # Access to the toolbelt repo scripts
+      - name: Checkout Toolbelt
+        uses: actions/checkout@v6
+        with:
+          repository: camber-ops/toolbelt
+          ref: main
+          token: ${{ secrets.REPO_READ_PAT }}
+          path: .toolbelt
+      - name: Load Toolbelt
+        uses: ./.toolbelt
+      # Poetry must be installed before python setup for caching to work.
+      # https://github.com/actions/setup-python/issues/369
+      - name: Install Poetry
+        run: pipx install poetry
+      # https://github.com/actions/setup-python
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python_version }}
+          cache: poetry
+      - name: Poetry Dependencies
+        run: |
+          poetry install ${{ inputs.include_extras  && '--all-extras' || '' }}
+          poetry env info
+      # https://github.com/aws-actions/configure-aws-credentials
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume:
+            arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/gh-standard
+          aws-region: us-west-2
+      - name: Pipper Dependencies
+        if: inputs.install_pipper
+        run: |
+          poetry run task pipper_update
+          poetry run task pipper_update --dev
+      - name: Flake8
+        if: inputs.check_quality && inputs.flake8
+        run: |
+          poetry run flake8 --version
+          poetry run task flake8
+      - name: PyDocStyle
+        if: inputs.check_quality && inputs.pydocstyle
+        run: |
+          poetry run pydocstyle --version
+          poetry run task pydocstyle
+      - name: Radon
+        if: inputs.check_quality && inputs.radon
+        run: poetry run task radon
+      - name: MyPy
+        if: inputs.check_quality && inputs.mypy
+        run: |
+          poetry run mypy --version
+          poetry run task mypy
+      - name: Task Test
+        if: inputs.test
+        run: poetry run task test

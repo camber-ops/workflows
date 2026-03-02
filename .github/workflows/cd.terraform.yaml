@@ -1,6 +1,6 @@
-# yamllint disable rule:line-length
+name: Terraforming
 
-on: # yamllint disable-line
+on:
   workflow_call:
     inputs:
       prod:
@@ -26,102 +26,116 @@ jobs:
     if: ${{ inputs.devel != 'skip' }}
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-    - uses: hashicorp/setup-terraform@v3
-    - name: Terraform Version
-      run: terraform version
-    - name: Terraform Check
-      run: terraform fmt --check --recursive --diff ./terraform
-    - uses: aws-actions/configure-aws-credentials@v4
-      with:
-        role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/gh-aws-read
-        aws-region: us-west-2
-    - name: Init
-      run: |
-        cd ./terraform
-        terraform init --upgrade
-    - name: Plan
-      run: |
-        cd ./terraform
-        terraform workspace select --or-create devel
-        terraform plan \
-          --var-file=terraform.tfvars \
-          --var-file=workspace-devel.tfvars \
-          --lock=false \
-          --input=false \
-          --out=devel.plan
-    # https://docs.gitlab.com/ee/user/infrastructure/iac/mr_integration.html
-    # https://docs.gitlab.com/ee/user/infrastructure/iac/mr_integration.html#multiple-terraform-plan-reports
-    - name: Report Plan
-      run: |
-        cd ./terraform
-        terraform show --json ./devel.plan | jq -r '([.resource_changes[]?.change.actions?]|flatten)|{"create":(map(select(.=="create"))|length),"update":(map(select(.=="update"))|length),"delete":(map(select(.=="delete"))|length)}' > ../devel_plan_report.json
-        cd ..
-    # https://github.com/actions/upload-artifact
-    - name: Archive plan
-      uses: actions/upload-artifact@v4
-      with:
-        name: devel-plan-report
-        path: devel_plan_report.json
-    - if: ${{ inputs.devel == 'apply' }}
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/gh-aws-read-write
-        aws-region: us-west-2
-    - name: Apply
-      if: ${{ inputs.devel == 'apply' }}
-      run: |
-        cd ./terraform
-        terraform apply ./devel.plan
+      - uses: actions/checkout@v6
+      # Access to the toolbelt repo scripts
+      - name: Checkout Toolbelt
+        uses: actions/checkout@v6
+        with:
+          repository: camber-ops/toolbelt
+          ref: main
+          token: ${{ secrets.REPO_READ_PAT }}
+          path: .toolbelt
+      - name: Load Toolbelt
+        uses: ./.toolbelt
+      - uses: hashicorp/setup-terraform@v3
+      - name: Terraform Version
+        run: terraform version
+      - name: Terraform Check
+        run: terraform fmt --check --recursive --diff ./terraform
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume:
+            arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/gh-aws-read
+          aws-region: us-west-2
+      - name: Init
+        run: |
+          cd ./terraform
+          terraform init --upgrade
+      - name: Plan
+        run: |
+          cd ./terraform
+          terraform workspace select --or-create devel
+          terraform plan \
+            --var-file=terraform.tfvars \
+            --var-file=workspace-devel.tfvars \
+            --lock=false \
+            --input=false \
+            --out=devel.plan
+      # https://docs.gitlab.com/ee/user/infrastructure/iac/mr_integration.html
+      # https://docs.gitlab.com/ee/user/infrastructure/iac/mr_integration.html#multiple-terraform-plan-reports
+      - name: Report Plan
+        run: |
+          cd ./terraform
+          terraform show --json ./devel.plan | jq -r '([.resource_changes[]?.change.actions?]|flatten)|{"create":(map(select(.=="create"))|length),"update":(map(select(.=="update"))|length),"delete":(map(select(.=="delete"))|length)}' > ../devel_plan_report.json
+          cd ..
+      # https://github.com/actions/upload-artifact
+      - name: Archive plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: devel-plan-report
+          path: devel_plan_report.json
+      - if: ${{ inputs.devel == 'apply' }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume:
+            arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/gh-aws-read-write
+          aws-region: us-west-2
+      - name: Apply
+        if: ${{ inputs.devel == 'apply' }}
+        run: |
+          cd ./terraform
+          terraform apply ./devel.plan
 
   terraform_prod:
     if: ${{ inputs.prod != 'skip' }}
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-    - uses: hashicorp/setup-terraform@v3
-    - name: Terraform Version
-      run: terraform version
-    - name: Terraform Check
-      run: terraform fmt --check --recursive --diff ./terraform
-    - uses: aws-actions/configure-aws-credentials@v4
-      with:
-        role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/gh-aws-read
-        aws-region: us-west-2
-    - name: Init
-      run: |
-        cd ./terraform
-        terraform init --upgrade
-    - name: Plan
-      run: |
-        cd ./terraform
-        terraform workspace select --or-create prod
-        terraform plan \
-          --var-file=terraform.tfvars \
-          --var-file=workspace-prod.tfvars \
-          --lock=false \
-          --input=false \
-          --out=prod.plan
-    # https://docs.gitlab.com/ee/user/infrastructure/iac/mr_integration.html
-    # https://docs.gitlab.com/ee/user/infrastructure/iac/mr_integration.html#multiple-terraform-plan-reports
-    - name: Report Plan
-      run: |
-        cd ./terraform
-        terraform show --json ./prod.plan | jq -r '([.resource_changes[]?.change.actions?]|flatten)|{"create":(map(select(.=="create"))|length),"update":(map(select(.=="update"))|length),"delete":(map(select(.=="delete"))|length)}' > ../prod_plan_report.json
-        cd ..
-    # https://github.com/actions/upload-artifact
-    - name: Archive plan
-      uses: actions/upload-artifact@v4
-      with:
-        name: prod-plan-report
-        path: prod_plan_report.json
-    - if: ${{ inputs.prod == 'apply' }}
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/gh-aws-read-write
-        aws-region: us-west-2
-    - name: Apply
-      if: ${{ inputs.prod == 'apply' }}
-      run: |
-        cd ./terraform
-        terraform apply ./prod.plan
+      - uses: actions/checkout@v6
+      - uses: hashicorp/setup-terraform@v3
+      - name: Terraform Version
+        run: terraform version
+      - name: Terraform Check
+        run: terraform fmt --check --recursive --diff ./terraform
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume:
+            arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/gh-aws-read
+          aws-region: us-west-2
+      - name: Init
+        run: |
+          cd ./terraform
+          terraform init --upgrade
+      - name: Plan
+        run: |
+          cd ./terraform
+          terraform workspace select --or-create prod
+          terraform plan \
+            --var-file=terraform.tfvars \
+            --var-file=workspace-prod.tfvars \
+            --lock=false \
+            --input=false \
+            --out=prod.plan
+      # https://docs.gitlab.com/ee/user/infrastructure/iac/mr_integration.html
+      # https://docs.gitlab.com/ee/user/infrastructure/iac/mr_integration.html#multiple-terraform-plan-reports
+      - name: Report Plan
+        run: |
+          cd ./terraform
+          terraform show --json ./prod.plan | jq -r '([.resource_changes[]?.change.actions?]|flatten)|{"create":(map(select(.=="create"))|length),"update":(map(select(.=="update"))|length),"delete":(map(select(.=="delete"))|length)}' > ../prod_plan_report.json
+          cd ..
+      # https://github.com/actions/upload-artifact
+      - name: Archive plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: prod-plan-report
+          path: prod_plan_report.json
+      - if: ${{ inputs.prod == 'apply' }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume:
+            arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/gh-aws-read-write
+          aws-region: us-west-2
+      - name: Apply
+        if: ${{ inputs.prod == 'apply' }}
+        run: |
+          cd ./terraform
+          terraform apply ./prod.plan

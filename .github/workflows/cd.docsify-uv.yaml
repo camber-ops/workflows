@@ -1,6 +1,6 @@
-name: docsify
+name: Docsify (UV)
 
-on: # yamllint disable-line
+on:
   workflow_call:
     inputs:
       devel:
@@ -33,62 +33,73 @@ jobs:
     outputs:
       zipped_docs_name: ${{ steps.docsify.outputs.filename }}
     steps:
-    # https://github.com/actions/checkout
-    - uses: actions/checkout@v6
-    # https://github.com/actions/setup-python
-    - uses: actions/setup-python@v6
-      with:
-        python-version: ${{ inputs.python_version }}
-    # https://github.com/astral-sh/setup-uv
-    - name: Install uv
-      uses: astral-sh/setup-uv@v7
-      with:
-        enable-cache: true
-    # https://github.com/aws-actions/configure-aws-credentials
-    - uses: aws-actions/configure-aws-credentials@v4
-      with:
-        role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/gh-pipper # yamllint disable-line
-        aws-region: us-west-2
-    - name: Configure CodeArtifact
-      env:
-        AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
-      run: |
-        TOKEN=$(aws codeartifact get-authorization-token \
-          --domain camber \
-          --domain-owner "$AWS_ACCOUNT_ID" \
-          --query authorizationToken \
-          --output text)
-        ENDPOINT=$(aws codeartifact get-repository-endpoint \
-          --domain camber \
-          --domain-owner "$AWS_ACCOUNT_ID" \
-          --repository camber-python \
-          --format pypi \
-          --query repositoryEndpoint \
-          --output text)
-        echo "UV_INDEX_CODE_ARTIFACT_USERNAME=aws" >> "$GITHUB_ENV"
-        echo "UV_INDEX_CODE_ARTIFACT_PASSWORD=$TOKEN" >> "$GITHUB_ENV"
-        INDEX_URL="https://aws:${TOKEN}@${ENDPOINT#https://}simple/"
-        echo "CA_INDEX_URL=${INDEX_URL}" >> "$GITHUB_ENV"
-    - name: Install Dependencies
-      if: inputs.has_code_modules
-      run: |
-        uv sync --all-extras
-        uv python list
-    - name: Install Docsify
-      if: inputs.install_docsify
-      run: uv pip install docsifier --index-url "$CA_INDEX_URL"
-    - name: Docsify
-      id: docsify
-      run: |
-        uv run docsifier collect .
-        ZIPPED_DOCS_NAME=`ls *.__docs__.zip`
-        echo "filename=${ZIPPED_DOCS_NAME}" >> "${GITHUB_OUTPUT}"
-    # https://github.com/actions/upload-artifact
-    - name: Store Zipped Docs
-      uses: actions/upload-artifact@v4
-      with:
-        name: docsified
-        path: ${{ steps.docsify.outputs.filename }}
+      # https://github.com/actions/checkout
+      - uses: actions/checkout@v6
+      # Access to the toolbelt repo scripts
+      - name: Checkout Toolbelt
+        uses: actions/checkout@v6
+        with:
+          repository: camber-ops/toolbelt
+          ref: main
+          token: ${{ secrets.REPO_READ_PAT }}
+          path: .toolbelt
+      - name: Load Toolbelt
+        uses: ./.toolbelt
+      # https://github.com/actions/setup-python
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ inputs.python_version }}
+      # https://github.com/astral-sh/setup-uv
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      # https://github.com/aws-actions/configure-aws-credentials
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume:
+            arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/gh-pipper
+          aws-region: us-west-2
+      - name: Configure CodeArtifact
+        env:
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+        run: |
+          TOKEN=$(aws codeartifact get-authorization-token \
+            --domain camber \
+            --domain-owner "$AWS_ACCOUNT_ID" \
+            --query authorizationToken \
+            --output text)
+          ENDPOINT=$(aws codeartifact get-repository-endpoint \
+            --domain camber \
+            --domain-owner "$AWS_ACCOUNT_ID" \
+            --repository camber-python \
+            --format pypi \
+            --query repositoryEndpoint \
+            --output text)
+          echo "UV_INDEX_CODE_ARTIFACT_USERNAME=aws" >> "$GITHUB_ENV"
+          echo "UV_INDEX_CODE_ARTIFACT_PASSWORD=$TOKEN" >> "$GITHUB_ENV"
+          INDEX_URL="https://aws:${TOKEN}@${ENDPOINT#https://}simple/"
+          echo "CA_INDEX_URL=${INDEX_URL}" >> "$GITHUB_ENV"
+      - name: Install Dependencies
+        if: inputs.has_code_modules
+        run: |
+          uv sync --all-extras
+          uv python list
+      - name: Install Docsify
+        if: inputs.install_docsify
+        run: uv pip install docsifier --index-url "$CA_INDEX_URL"
+      - name: Docsify
+        id: docsify
+        run: |
+          uv run docsifier collect .
+          ZIPPED_DOCS_NAME=`ls *.__docs__.zip`
+          echo "filename=${ZIPPED_DOCS_NAME}" >> "${GITHUB_OUTPUT}"
+      # https://github.com/actions/upload-artifact
+      - name: Store Zipped Docs
+        uses: actions/upload-artifact@v4
+        with:
+          name: docsified
+          path: ${{ steps.docsify.outputs.filename }}
   upload_docs:
     needs: [collect_docs]
     uses: ./.github/workflows/cd.artifacts.yaml

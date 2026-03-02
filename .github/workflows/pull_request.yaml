@@ -1,0 +1,8 @@
+name: pull_request
+
+on: [pull_request]
+
+jobs:
+  lint:
+    uses: ./.github/workflows/ci.prettier.yaml
+    secrets: inherit

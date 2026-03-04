@@ -3,17 +3,16 @@ name: Check Structure
 on: [workflow_call]
 
 permissions:
-  # This is required for the commit count check.
+  # This is required for the commit quality checks.
   pull-requests: read
-  repository-projects: read
 
 jobs:
-  commit_count_check:
+  commit_quality_check:
     runs-on: ubuntu-latest
     steps:
       # https://github.com/marketplace/actions/github-api-request
       - uses: octokit/request-action@v2.x
-        id: get_commit_count
+        id: get_commits
         with:
           # https://docs.github.com/en/rest/pulls/pulls#list-commits-on-a-pull-request
           route:
@@ -24,7 +23,42 @@ jobs:
       - name: Log Commits
         run: |
           cat >./commits.log <<EOL
-          ${{ steps.get_commit_count.outputs.data }}
+          ${{ steps.get_commits.outputs.data }}
           EOL
-      - name: Check Single Commit
-        run: jq '. | length' ./commits.log | xargs -I % test % -eq 1
+      - name: Check Commit Count
+        run: |
+          count=$(jq '. | length' ./commits.log)
+          if [ "$count" -lt 1 ] || [ "$count" -gt 3 ]; then
+            echo "ERROR: PR must have between 1 and 3 commits, found ${count}."
+            exit 1
+          fi
+      - name: Check No Merge Commits
+        run: |
+          merge_count=$(jq '[.[] | select(.parents | length > 1)] | length' ./commits.log)
+          if [ "$merge_count" -gt 0 ]; then
+            echo "ERROR: PR contains ${merge_count} merge commit(s)."
+            echo "History must be linear (rebase only)."
+            exit 1
+          fi
+      - name: Check Commit Message Format
+        run: |
+          jq -e '
+            all(
+              .[].commit.message;
+              . as $msg |
+              ($msg | split("\n\n")) as $parts |
+              ($parts | length >= 2) and
+              ($parts[0] | length >= 6) and
+              ($parts[1] | length >= 10)
+            )
+          ' ./commits.log || {
+            echo "ERROR: One or more commits have an invalid message format."
+            echo "Each commit must have a subject (6+ chars) and a body (10+ chars)"
+            echo "separated by a blank line."
+            echo ""
+            echo "Expected format:"
+            echo "  Commit Subject"
+            echo ""
+            echo "  Commit message description..."
+            exit 1
+          }

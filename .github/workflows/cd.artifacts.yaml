@@ -43,7 +43,10 @@ jobs:
           token: ${{ secrets.REPO_READ_PAT }}
           path: .toolbelt
       - name: Load Toolbelt
-        uses: ./.toolbelt
+        run: |
+          chmod -R +x $GITHUB_WORKSPACE/.toolbelt/bin
+          echo "$GITHUB_WORKSPACE/.toolbelt/bin" >> $GITHUB_PATH
+        shell: bash
       - name: AWS CLI
         run: aws --version
       # https://github.com/aws-actions/configure-aws-credentials

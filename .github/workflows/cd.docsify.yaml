@@ -40,7 +40,10 @@ jobs:
           token: ${{ secrets.REPO_READ_PAT }}
           path: .toolbelt
       - name: Load Toolbelt
-        uses: ./.toolbelt
+        run: |
+          chmod -R +x $GITHUB_WORKSPACE/.toolbelt/bin
+          echo "$GITHUB_WORKSPACE/.toolbelt/bin" >> $GITHUB_PATH
+        shell: bash
       # Poetry must be installed before python setup for caching to work.
       # https://github.com/actions/setup-python/issues/369
       - name: Install Poetry

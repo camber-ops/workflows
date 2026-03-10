@@ -21,8 +21,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Log Commits
+        env:
+          COMMITS_JSON: ${{ steps.get_commits.outputs.data }}
         run: |
-          printf '%s\n' '${{ steps.get_commits.outputs.data }}' > ./commits.log
+          printf '%s\n' "$COMMITS_JSON" > ./commits.log
       - name: Check Commit Count
         run: |
           count=$(jq '. | length' ./commits.log)

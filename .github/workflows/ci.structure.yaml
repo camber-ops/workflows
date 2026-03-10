@@ -22,9 +22,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Log Commits
         run: |
-          cat >./commits.log <<EOL
-          ${{ steps.get_commits.outputs.data }}
-          EOL
+          printf '%s\n' '${{ steps.get_commits.outputs.data }}' > ./commits.log
       - name: Check Commit Count
         run: |
           count=$(jq '. | length' ./commits.log)

@@ -18,10 +18,6 @@ on:
         required: false
         type: boolean
         default: true
-      install_pipper:
-        required: false
-        type: boolean
-        default: true
       report_coverage:
         required: false
         type: boolean
@@ -84,14 +80,28 @@ jobs:
           uv sync ${{ inputs.include_extras && '--all-extras' || '' }}
           uv python list
       - name: Pipper Dependencies
-        if: inputs.install_pipper
-        run: uv run task pipper_update_all
+        run: |
+          if uv run task --list | grep -qE "^pipper_update_all\b"; then
+            uv run task pipper_update_all
+          else
+            echo "pipper_update_all task not found, skipping"
+          fi
       - name: Ruff
         if: inputs.check_quality
-        run: uv run task ruff
+        run: |
+          if uv run task --list | grep -qE "^lint_ruff\b"; then
+            uv run task lint_ruff
+          else
+            uv run task ruff
+          fi
       - name: MyPy
         if: inputs.check_quality
-        run: uv run task mypy
+        run: |
+          if uv run task --list | grep -qE "^lint_mypy\b"; then
+            uv run task lint_mypy
+          else
+            uv run task mypy
+          fi
       - name: Test
         if: inputs.test
         run: uv run task test

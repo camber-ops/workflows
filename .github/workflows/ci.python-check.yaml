@@ -98,7 +98,7 @@ jobs:
         if: inputs.check_quality
         run: |
           if uv run task --list | grep -qE "^lint_mypy\b"; then
-            uv run task lint_mypy
+            uv run task lint_mypy .
           else
             uv run task mypy
           fi

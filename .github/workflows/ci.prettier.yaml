@@ -9,7 +9,7 @@ permissions:
   repository-projects: read
 
 jobs:
-  markdown:
+  linting:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6

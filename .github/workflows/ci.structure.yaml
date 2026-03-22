@@ -28,8 +28,8 @@ jobs:
       - name: Check Commit Count
         run: |
           count=$(jq '. | length' ./commits.log)
-          if [ "$count" -lt 1 ] || [ "$count" -gt 3 ]; then
-            echo "ERROR: PR must have between 1 and 3 commits, found ${count}."
+          if [ "$count" -lt 1 ] || [ "$count" -gt 5 ]; then
+            echo "ERROR: PR must have between 1 and 5 commits, found ${count}."
             exit 1
           fi
       - name: Check No Merge Commits

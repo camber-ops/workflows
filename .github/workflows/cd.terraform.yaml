@@ -45,7 +45,7 @@ jobs:
         run: terraform version
       - name: Terraform Check
         run: terraform fmt --check --recursive --diff ./terraform
-      - uses: aws-actions/configure-aws-credentials@v4
+      - uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume:
             arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/gh-aws-read
@@ -78,7 +78,7 @@ jobs:
           name: devel-plan-report
           path: devel_plan_report.json
       - if: ${{ inputs.devel == 'apply' }}
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume:
             arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/gh-aws-read-write
@@ -99,7 +99,7 @@ jobs:
         run: terraform version
       - name: Terraform Check
         run: terraform fmt --check --recursive --diff ./terraform
-      - uses: aws-actions/configure-aws-credentials@v4
+      - uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume:
             arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/gh-aws-read
@@ -132,7 +132,7 @@ jobs:
           name: prod-plan-report
           path: prod_plan_report.json
       - if: ${{ inputs.prod == 'apply' }}
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume:
             arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/gh-aws-read-write

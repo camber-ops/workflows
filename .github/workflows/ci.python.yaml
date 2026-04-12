@@ -79,7 +79,7 @@ jobs:
           poetry install ${{ inputs.include_extras  && '--all-extras' || '' }}
           poetry env info
       # https://github.com/aws-actions/configure-aws-credentials
-      - uses: aws-actions/configure-aws-credentials@v4
+      - uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume:
             arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/gh-standard

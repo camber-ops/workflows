@@ -28,7 +28,7 @@ jobs:
           echo "$GITHUB_WORKSPACE/.toolbelt/bin" >> $GITHUB_PATH
         shell: bash
       # https://github.com/actions/setup-python
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ inputs.python_version }}
       - name: Install

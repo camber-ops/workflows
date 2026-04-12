@@ -55,7 +55,7 @@ jobs:
       - name: Install Poetry
         run: pipx install poetry
       # https://github.com/actions/setup-python
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ inputs.python_version }}
       - name: Poetry Dependencies

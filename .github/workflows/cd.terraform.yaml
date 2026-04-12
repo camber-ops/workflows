@@ -73,7 +73,7 @@ jobs:
           cd ..
       # https://github.com/actions/upload-artifact
       - name: Archive plan
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: devel-plan-report
           path: devel_plan_report.json
@@ -127,7 +127,7 @@ jobs:
           cd ..
       # https://github.com/actions/upload-artifact
       - name: Archive plan
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: prod-plan-report
           path: prod_plan_report.json

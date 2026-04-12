@@ -49,7 +49,7 @@ jobs:
       - name: Install Poetry
         run: pipx install poetry
       # https://github.com/actions/setup-python
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.13"
       - name: Poetry Dependencies
@@ -85,7 +85,7 @@ jobs:
           echo "filename=${ZIPPED_DOCS_NAME}" >> "${GITHUB_OUTPUT}"
       # https://github.com/actions/upload-artifact
       - name: Store Zipped Docs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: docsified
           path: ${{ steps.docsify.outputs.filename }}

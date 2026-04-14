@@ -49,7 +49,7 @@ jobs:
           chmod -R +x $GITHUB_WORKSPACE/.toolbelt/bin
           echo "$GITHUB_WORKSPACE/.toolbelt/bin" >> $GITHUB_PATH
         shell: bash
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: ~/.cache/pip
           key:

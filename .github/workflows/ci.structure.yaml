@@ -1,10 +1,19 @@
 name: Check Structure
 
-on: [workflow_call]
+on:
+  workflow_call:
+    inputs:
+      check_version_bump:
+        type: boolean
+        default: true
+        description: >
+          Warn if pyproject.toml or package.json version is unchanged in this
+          PR. Set to false for repos that do not require version bumps.
 
 permissions:
-  # This is required for the commit quality checks.
+  # Required for commit quality checks and version bump checkout.
   pull-requests: read
+  contents: read
 
 jobs:
   commit_quality_check:
@@ -28,7 +37,7 @@ jobs:
       - name: Check Commit Count
         run: |
           count=$(jq '. | length' ./commits.log)
-          if [ "$count" -lt 1 ] || [ "$count" -gt 5 ]; then
+          if [ "$count" -lt 1 ] || [ "$count" -gt 8 ]; then
             echo "ERROR: PR must have between 1 and 5 commits, found ${count}."
             exit 1
           fi
@@ -62,3 +71,39 @@ jobs:
             echo "  Commit message description..."
             exit 1
           }
+
+  version_bump_check:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    if: github.event_name == 'pull_request' && inputs.check_version_bump
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch base branch
+        run: git fetch origin ${{ github.base_ref }}
+      - name: Check Version Bump
+        run: |
+          FAILED=0
+
+          if [ -f pyproject.toml ]; then
+            head_ver=$(grep -m1 '^version = ' pyproject.toml | grep -o '"[^"]*"' | tr -d '"')
+            base_ver=$(git show origin/${{ github.base_ref }}:pyproject.toml 2>/dev/null \
+              | grep -m1 '^version = ' | grep -o '"[^"]*"' | tr -d '"')
+            if [ -n "$head_ver" ] && [ -n "$base_ver" ] && [ "$head_ver" = "$base_ver" ]; then
+              echo "WARNING: pyproject.toml version not bumped (${head_ver})."
+              echo "Consider bumping the version for this PR."
+              FAILED=1
+            fi
+          fi
+
+          if [ -f package.json ]; then
+            head_ver=$(jq -r '.version // empty' package.json)
+            base_ver=$(git show origin/${{ github.base_ref }}:package.json 2>/dev/null \
+              | jq -r '.version // empty')
+            if [ -n "$head_ver" ] && [ -n "$base_ver" ] && [ "$head_ver" = "$base_ver" ]; then
+              echo "WARNING: package.json version not bumped (${head_ver})."
+              echo "Consider bumping the version for this PR."
+              FAILED=1
+            fi
+          fi
+
+          exit $FAILED

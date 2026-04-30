@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       # https://github.com/marketplace/actions/github-api-request
-      - uses: octokit/request-action@v2.x
+      - uses: octokit/request-action@v3.x
         id: get_commits
         with:
           # https://docs.github.com/en/rest/pulls/pulls#list-commits-on-a-pull-request

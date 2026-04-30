@@ -219,3 +219,5 @@ dmypy.json
 cython_debug/
 
 plan.*.md
+.DS_STORE
+

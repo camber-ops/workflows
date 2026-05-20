@@ -166,8 +166,12 @@ jobs:
         run: pipper install --bucket=cbrdata-pipper ci
       - name: Install Podman
         run: |
-          sudo apt-get update
-          sudo apt-get -y install podman
+          # Clear stale package lists before update to avoid transient mirror-sync
+          # errors on ports.ubuntu.com (ARM64). Acquire::Retries=5 retries failed
+          # fetches automatically without needing a shell loop.
+          sudo rm -rf /var/lib/apt/lists/*
+          sudo apt-get -o Acquire::Retries=5 update
+          sudo apt-get -o Acquire::Retries=5 install -y --no-install-recommends podman
           podman --version
       # Alias podman to docker since podman is a drop-in replacement
       - name: Alias Podman to Docker

@@ -35,10 +35,23 @@ jobs:
         run: |
           printf '%s\n' "$COMMITS_JSON" > ./commits.log
       - name: Check Commit Count
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           count=$(jq '. | length' ./commits.log)
-          if [ "$count" -lt 1 ] || [ "$count" -gt 8 ]; then
-            echo "ERROR: PR must have between 1 and 5 commits, found ${count}."
+          unlimited_commits=$(jq -r --arg head_sha "$HEAD_SHA" '
+            (map(select(.sha == $head_sha))[0].commit.message // "") |
+            contains("[unlimited commits]")
+          ' ./commits.log)
+
+          if [ "$count" -lt 1 ]; then
+            echo "ERROR: PR must have at least 1 commit, found ${count}."
+            exit 1
+          fi
+
+          if [ "$count" -gt 8 ] && [ "$unlimited_commits" != "true" ]; then
+            echo "ERROR: PR must have between 1 and 8 commits, found ${count}."
+            echo "Include [unlimited commits] in the latest commit message to allow more commits."
             exit 1
           fi
       - name: Check No Merge Commits

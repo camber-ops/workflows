@@ -50,6 +50,10 @@ jobs:
           role-to-assume:
             arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/gh-aws-read
           aws-region: us-west-2
+      - name: Verify AWS identity
+        run: |
+          aws sts get-caller-identity
+          aws configure list
       - name: Init
         run: |
           cd ./terraform
@@ -104,6 +108,10 @@ jobs:
           role-to-assume:
             arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/gh-aws-read
           aws-region: us-west-2
+      - name: Verify AWS identity
+        run: |
+          aws sts get-caller-identity
+          aws configure list
       - name: Init
         run: |
           cd ./terraform

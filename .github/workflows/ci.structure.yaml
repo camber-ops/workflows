@@ -85,10 +85,41 @@ jobs:
             exit 1
           }
 
+  version_bump_skip_check:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && inputs.check_version_bump
+    outputs:
+      skip_version_bump: ${{ steps.check_skip.outputs.skip_version_bump }}
+    steps:
+      - uses: octokit/request-action@v3.x
+        id: get_commits
+        with:
+          route:
+            GET /repos/${{ github.event.repository.full_name }}/pulls/${{
+            github.event.number }}/commits
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Check Skip Version Token
+        id: check_skip
+        env:
+          COMMITS_JSON: ${{ steps.get_commits.outputs.data }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          skip_version_bump=$(printf '%s\n' "$COMMITS_JSON" | jq -r --arg head_sha "$HEAD_SHA" '
+            (map(select(.sha == $head_sha))[0].commit.message // "") |
+            contains("[skip version]")
+          ')
+
+          echo "skip_version_bump=${skip_version_bump}" >> "$GITHUB_OUTPUT"
+
   version_bump_check:
+    needs: version_bump_skip_check
     runs-on: ubuntu-latest
     continue-on-error: true
-    if: github.event_name == 'pull_request' && inputs.check_version_bump
+    if: >-
+      github.event_name == 'pull_request' && inputs.check_version_bump &&
+      !contains(github.event.pull_request.body || '', '[skip version]') &&
+      needs.version_bump_skip_check.outputs.skip_version_bump != 'true'
     steps:
       - uses: actions/checkout@v6
       - name: Fetch base branch

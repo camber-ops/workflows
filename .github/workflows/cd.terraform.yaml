@@ -242,8 +242,8 @@ jobs:
             echo "::warning::Report Plan (${ENV_NAME}): could not render the human-readable plan summary; see the archived JSON artifact for the change counts."
           else
             printf '%s\n' "$SUMMARY_MD"
-            # GitHub rejects step summaries over 1 MiB, so truncate well below that.
-            if [ "${#SUMMARY_MD}" -gt 900000 ]; then
+            # GitHub rejects step summaries over 1 MiB, so truncate (by bytes) well below that.
+            if [ "$(printf '%s' "$SUMMARY_MD" | wc -c)" -gt 900000 ]; then
               SUMMARY_MD="$(printf '%s' "$SUMMARY_MD" | head -c 900000 | sed '$d')"$'\n\n_(summary truncated; see the Report Plan step log for the full list)_'
             fi
             printf '%s\n' "$SUMMARY_MD" >> "${GITHUB_STEP_SUMMARY:-/dev/null}" || echo "::warning::Report Plan (${ENV_NAME}): could not write the job summary."

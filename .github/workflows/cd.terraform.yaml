@@ -70,10 +70,163 @@ jobs:
             --out=devel.plan
       # https://docs.gitlab.com/ee/user/infrastructure/iac/mr_integration.html
       # https://docs.gitlab.com/ee/user/infrastructure/iac/mr_integration.html#multiple-terraform-plan-reports
+      # Shared with terraform_prod via the YAML anchor below.
       - name: Report Plan
-        run: |
+        env:
+          ENV_NAME: devel
+        run: &report_plan |
           cd ./terraform
-          terraform show --json ./devel.plan | jq -r '([.resource_changes[]?.change.actions?]|flatten)|{"create":(map(select(.=="create"))|length),"update":(map(select(.=="update"))|length),"delete":(map(select(.=="delete"))|length)}' > ../devel_plan_report.json
+          PLAN_FILE="${ENV_NAME}.plan"
+          REPORT_FILE="../${ENV_NAME}_plan_report.json"
+          PLAN_JSON=$(terraform show --json "./${PLAN_FILE}")
+
+          # Backward-compatible counts artifact: same computation as before (flatten every
+          # resource_changes[].change.actions array and count each action value).
+          echo "$PLAN_JSON" | jq -r '([.resource_changes[]?.change.actions?]|flatten)|{"create":(map(select(.=="create"))|length),"update":(map(select(.=="update"))|length),"delete":(map(select(.=="delete"))|length)}' > "$REPORT_FILE"
+
+          # Friendly, human-readable summary for the step log and the job summary. This
+          # never prints attribute VALUES (only resource addresses and attribute names),
+          # since plans can contain sensitive data. A rendering failure here must not
+          # fail the job; a failure of `terraform show` above is still fatal.
+          REPORT_JQ="$(mktemp)"
+          cat > "$REPORT_JQ" <<'JQ_PROGRAM'
+          def top_keys(x):
+            if (x == null) then []
+            elif (x|type) == "object" then (x|keys)
+            else [] end;
+
+          def changed_attrs(rc):
+            (rc.change.before // {}) as $b
+            | (rc.change.after // {}) as $a
+            | (rc.change.after_unknown // {}) as $u
+            | ( (top_keys($b) + top_keys($a) + top_keys($u)) | unique ) as $keys
+            | [ $keys[] | select(
+                  ( ($u[.]? // false) as $uu | ($uu != false and $uu != null) )
+                  or
+                  ( ($b[.]?) != ($a[.]?) )
+                ) ];
+
+          def path_str(p): [p[] | tostring] | join(".");
+
+          def replace_paths_list(rc):
+            (rc.change.replace_paths // []) | map(path_str(.));
+
+          def category(rc):
+            (rc.change.actions // []) as $a
+            | if $a == ["no-op"] then "noop"
+              elif $a == ["create"] then "create"
+              elif $a == ["delete"] then "delete"
+              elif $a == ["update"] then "update"
+              elif (($a|index("create")) != null) and (($a|index("delete")) != null) then "replace"
+              elif $a == ["read"] then "read"
+              else "other" end;
+
+          def is_moved(rc): (rc.previous_address // null) != null;
+          def is_imported(rc): (rc.change.importing // null) != null;
+
+          def safe_code(s):
+            (s // "") as $s
+            | if ($s|test("`")) then ("`` " + $s + " ``")
+              else ("`" + $s + "`")
+              end;
+
+          def cap: 250;
+
+          def render_entry(rc):
+            (rc.cat) as $c
+            | safe_code(rc.address) as $addr
+            | ( if ($c == "update" or $c == "replace") then changed_attrs(rc) else [] end ) as $ch
+            | ( if ($c == "replace") then replace_paths_list(rc) else [] end ) as $rp
+            | [
+                "- " + $addr,
+                ( if ($c == "replace") then (if (rc.change.actions|index("create")) < (rc.change.actions|index("delete")) then " _(create-then-delete)_" else " _(delete-then-create)_" end) else "" end ),
+                ( if is_moved(rc) then " _(moved from " + safe_code(rc.previous_address) + ")_" else "" end),
+                ( if is_imported(rc) then " _(imported)_" else "" end),
+                ( if ($ch|length) > 0 then " — changed: " + ($ch|map(safe_code(.))|join(", ")) else "" end),
+                ( if ($rp|length) > 0 then " — replace paths: " + ($rp|map(safe_code(.))|join(", ")) else "" end)
+              ] | join("");
+
+          def render_section(title; items):
+            (items|length) as $total
+            | if $total == 0 then empty
+              else
+                (items | sort_by(.address) | .[0:cap]) as $shown
+                | "### " + title + " (" + ($total|tostring) + ")\n"
+                  + ( [ $shown[] | render_entry(.) ] | join("\n") )
+                  + ( if $total > ($shown|length) then "\n\n_(+"+(($total-($shown|length))|tostring)+" more not shown; "+($total|tostring)+" total)_" else "" end)
+              end;
+
+          def output_action_label(a):
+            if a == ["create"] then "create"
+            elif a == ["update"] then "update"
+            elif a == ["delete"] then "delete"
+            elif (a|index("create")) and (a|index("delete")) then "replace"
+            else (a|join(",")) end;
+
+          def render_outputs:
+            ( .output_changes // {} ) as $oc
+            | [ $oc | to_entries[] | select(.value.actions != ["no-op"]) ] as $changed
+            | (($changed|length)) as $total
+            | if $total == 0 then empty
+              else
+                ($changed | sort_by(.key) | .[0:cap]) as $shown
+                | "### Output changes (" + ($total|tostring) + ")\n"
+                  + ( [ $shown[] | "- " + safe_code(.key) + " — " + output_action_label(.value.actions) ] | join("\n") )
+                  + ( if $total > ($shown|length) then "\n\n_(+"+(($total-($shown|length))|tostring)+" more not shown; "+($total|tostring)+" total)_" else "" end)
+              end;
+
+          # ---- main ----
+
+          ( [ .resource_changes[]?
+              | { address, previous_address, change,
+                  cat: category(.) }
+            ]
+          ) as $all
+          | ( [ $all[] | select(.cat=="create") ] ) as $creates
+          | ( [ $all[] | select(.cat=="update") ] ) as $updates
+          | ( [ $all[] | select(.cat=="replace") ] ) as $replaces
+          | ( [ $all[] | select(.cat=="delete") ] ) as $deletes
+          | ( [ $all[] | select(.cat=="other") ] ) as $others
+          | ( [ $all[] | select((.cat=="noop" or .cat=="read") and ((.previous_address // null) != null)) ] ) as $movedNoop
+          | ( [ $all[] | select((.cat=="noop" or .cat=="read") and ((.change.importing // null) != null) and ((.previous_address // null) == null)) ] ) as $importedNoop
+          | ( ($creates|length) + ($replaces|length) ) as $add
+          | ( ($updates|length) ) as $change
+          | ( ($deletes|length) + ($replaces|length) ) as $destroy
+          | ( $replaces|length ) as $replacements
+          | ( $add + $change + $destroy + ($movedNoop|length) + ($importedNoop|length) + ($others|length) ) as $total_relevant
+          | ( [ .output_changes // {} | to_entries[] | select(.value.actions != ["no-op"]) ] | length ) as $out_changed
+          |
+          if ($total_relevant == 0 and $out_changed == 0) then
+            "## Terraform Plan: " + $env_name + "\n\nNo changes. Your infrastructure matches the configuration.\n"
+          else
+            "## Terraform Plan: " + $env_name + "\n\n"
+            + "**Plan: " + ($add|tostring) + " to add, " + ($change|tostring) + " to change, " + ($destroy|tostring) + " to destroy.**"
+            + ( if $replacements > 0 then " _(" + ($replacements|tostring) + " replacement" + (if $replacements==1 then "" else "s" end) + ")_" else "" end )
+            + "\n\n"
+            + ( [
+                  render_section("Resources to create"; $creates),
+                  render_section("Resources to update"; $updates),
+                  render_section("Resources to replace"; $replaces),
+                  render_section("Resources to delete"; $deletes),
+                  render_section("Other resource changes"; $others),
+                  render_section("Resources moved"; $movedNoop),
+                  render_section("Resources imported (no other change)"; $importedNoop),
+                  render_outputs
+                ] | map(select(. != null and . != "")) | join("\n\n") )
+            + "\n"
+          end
+          JQ_PROGRAM
+          set +e
+          SUMMARY_MD="$(echo "$PLAN_JSON" | jq -r --arg env_name "$ENV_NAME" -f "$REPORT_JQ")"
+          JQ_STATUS=$?
+          set -e
+          rm -f "$REPORT_JQ"
+          if [ "$JQ_STATUS" -ne 0 ] || [ -z "$SUMMARY_MD" ]; then
+            echo "::warning::Report Plan (${ENV_NAME}): could not render the human-readable plan summary; see the archived JSON artifact for the change counts."
+          else
+            printf '%s\n' "$SUMMARY_MD"
+            printf '%s\n' "$SUMMARY_MD" >> "$GITHUB_STEP_SUMMARY"
+          fi
           cd ..
       # https://github.com/actions/upload-artifact
       - name: Archive plan
@@ -129,10 +282,9 @@ jobs:
       # https://docs.gitlab.com/ee/user/infrastructure/iac/mr_integration.html
       # https://docs.gitlab.com/ee/user/infrastructure/iac/mr_integration.html#multiple-terraform-plan-reports
       - name: Report Plan
-        run: |
-          cd ./terraform
-          terraform show --json ./prod.plan | jq -r '([.resource_changes[]?.change.actions?]|flatten)|{"create":(map(select(.=="create"))|length),"update":(map(select(.=="update"))|length),"delete":(map(select(.=="delete"))|length)}' > ../prod_plan_report.json
-          cd ..
+        env:
+          ENV_NAME: prod
+        run: *report_plan
       # https://github.com/actions/upload-artifact
       - name: Archive plan
         uses: actions/upload-artifact@v7

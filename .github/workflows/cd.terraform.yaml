@@ -101,12 +101,13 @@ jobs:
             | (rc.change.after_unknown // {}) as $u
             | ( (top_keys($b) + top_keys($a) + top_keys($u)) | unique ) as $keys
             | [ $keys[] | select(
-                  ( ($u[.]? // false) as $uu | ($uu != false and $uu != null) )
+                  ( [ ($u[.]? // false) | .. | select(. == true) ] | length > 0 )
                   or
                   ( ($b[.]?) != ($a[.]?) )
                 ) ];
 
-          def path_str(p): [p[] | tostring] | join(".");
+          def path_str(p):
+            [p[] | if (type == "string" or type == "number") then tostring else "?" end] | join(".");
 
           def replace_paths_list(rc):
             (rc.change.replace_paths // []) | map(path_str(.));
@@ -119,16 +120,24 @@ jobs:
               elif $a == ["update"] then "update"
               elif (($a|index("create")) != null) and (($a|index("delete")) != null) then "replace"
               elif $a == ["read"] then "read"
+              elif $a == ["forget"] then "forget"
               else "other" end;
 
           def is_moved(rc): (rc.previous_address // null) != null;
           def is_imported(rc): (rc.change.importing // null) != null;
 
           def safe_code(s):
-            (s // "") as $s
-            | if ($s|test("`")) then ("`` " + $s + " ``")
+            ((s // "") | tostring | gsub("[\r\n]"; " ")) as $s
+            | if ($s|test("`")) then
+                ([range(([$s | match("`+"; "g") | .length] | max) + 1) | "`"] | join("")) as $f
+                | $f + " " + $s + " " + $f
               else ("`" + $s + "`")
               end;
+
+          # Cap long attribute-name lists so one resource can't blow up the summary.
+          def names_list(xs):
+            (xs | .[0:15] | map(safe_code(.)) | join(", "))
+            + (if (xs|length) > 15 then " _(+" + (((xs|length) - 15)|tostring) + " more)_" else "" end);
 
           def cap: 250;
 
@@ -142,8 +151,9 @@ jobs:
                 ( if ($c == "replace") then (if (rc.change.actions|index("create")) < (rc.change.actions|index("delete")) then " _(create-then-delete)_" else " _(delete-then-create)_" end) else "" end ),
                 ( if is_moved(rc) then " _(moved from " + safe_code(rc.previous_address) + ")_" else "" end),
                 ( if is_imported(rc) then " _(imported)_" else "" end),
-                ( if ($ch|length) > 0 then " — changed: " + ($ch|map(safe_code(.))|join(", ")) else "" end),
-                ( if ($rp|length) > 0 then " — replace paths: " + ($rp|map(safe_code(.))|join(", ")) else "" end)
+                ( if (rc.deposed // null) != null then " _(deposed object)_" else "" end),
+                ( if ($ch|length) > 0 then " — changed: " + names_list($ch) else "" end),
+                ( if ($rp|length) > 0 then " — replace paths: " + names_list($rp) else "" end)
               ] | join("");
 
           def render_section(title; items):
@@ -178,7 +188,7 @@ jobs:
           # ---- main ----
 
           ( [ .resource_changes[]?
-              | { address, previous_address, change,
+              | { address, previous_address, deposed, change,
                   cat: category(.) }
             ]
           ) as $all
@@ -186,21 +196,27 @@ jobs:
           | ( [ $all[] | select(.cat=="update") ] ) as $updates
           | ( [ $all[] | select(.cat=="replace") ] ) as $replaces
           | ( [ $all[] | select(.cat=="delete") ] ) as $deletes
+          | ( [ $all[] | select(.cat=="forget") ] ) as $forgets
           | ( [ $all[] | select(.cat=="other") ] ) as $others
+          | ( [ $all[] | select((.change.importing // null) != null) ] | length ) as $imports
           | ( [ $all[] | select((.cat=="noop" or .cat=="read") and ((.previous_address // null) != null)) ] ) as $movedNoop
           | ( [ $all[] | select((.cat=="noop" or .cat=="read") and ((.change.importing // null) != null) and ((.previous_address // null) == null)) ] ) as $importedNoop
           | ( ($creates|length) + ($replaces|length) ) as $add
           | ( ($updates|length) ) as $change
           | ( ($deletes|length) + ($replaces|length) ) as $destroy
           | ( $replaces|length ) as $replacements
-          | ( $add + $change + $destroy + ($movedNoop|length) + ($importedNoop|length) + ($others|length) ) as $total_relevant
+          | ( $add + $change + $destroy + ($movedNoop|length) + ($importedNoop|length) + ($forgets|length) + ($others|length) ) as $total_relevant
           | ( [ .output_changes // {} | to_entries[] | select(.value.actions != ["no-op"]) ] | length ) as $out_changed
           |
           if ($total_relevant == 0 and $out_changed == 0) then
             "## Terraform Plan: " + $env_name + "\n\nNo changes. Your infrastructure matches the configuration.\n"
           else
             "## Terraform Plan: " + $env_name + "\n\n"
-            + "**Plan: " + ($add|tostring) + " to add, " + ($change|tostring) + " to change, " + ($destroy|tostring) + " to destroy.**"
+            + "**Plan: "
+            + ( if $imports > 0 then ($imports|tostring) + " to import, " else "" end )
+            + ($add|tostring) + " to add, " + ($change|tostring) + " to change, " + ($destroy|tostring) + " to destroy"
+            + ( if ($forgets|length) > 0 then ", " + (($forgets|length)|tostring) + " to forget" else "" end )
+            + ".**"
             + ( if $replacements > 0 then " _(" + ($replacements|tostring) + " replacement" + (if $replacements==1 then "" else "s" end) + ")_" else "" end )
             + "\n\n"
             + ( [
@@ -208,6 +224,7 @@ jobs:
                   render_section("Resources to update"; $updates),
                   render_section("Resources to replace"; $replaces),
                   render_section("Resources to delete"; $deletes),
+                  render_section("Resources to forget (removed from state, not destroyed)"; $forgets),
                   render_section("Other resource changes"; $others),
                   render_section("Resources moved"; $movedNoop),
                   render_section("Resources imported (no other change)"; $importedNoop),
@@ -225,7 +242,11 @@ jobs:
             echo "::warning::Report Plan (${ENV_NAME}): could not render the human-readable plan summary; see the archived JSON artifact for the change counts."
           else
             printf '%s\n' "$SUMMARY_MD"
-            printf '%s\n' "$SUMMARY_MD" >> "$GITHUB_STEP_SUMMARY"
+            # GitHub rejects step summaries over 1 MiB, so truncate well below that.
+            if [ "${#SUMMARY_MD}" -gt 900000 ]; then
+              SUMMARY_MD="$(printf '%s' "$SUMMARY_MD" | head -c 900000 | sed '$d')"$'\n\n_(summary truncated; see the Report Plan step log for the full list)_'
+            fi
+            printf '%s\n' "$SUMMARY_MD" >> "${GITHUB_STEP_SUMMARY:-/dev/null}" || echo "::warning::Report Plan (${ENV_NAME}): could not write the job summary."
           fi
           cd ..
       # https://github.com/actions/upload-artifact

@@ -221,3 +221,7 @@ cython_debug/
 plan.*.md
 .DS_STORE
 
+
+# camber-ops/toolbelt checkout created by CI workflows (also keeps
+# prettier, which honors .gitignore, from linting it).
+.toolbelt/
